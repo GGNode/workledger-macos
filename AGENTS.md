@@ -27,3 +27,9 @@ Browser screenshot tests are optional and require Playwright/Chromium. `tests/re
 Every changed native schema needs a minimal sanitized regression fixture. Use `real-fixtures/` for private local originals; it is excluded from git. Replace names, paths and texts before adding any fixture to `tests/`.
 
 Optional `zstandard` is the only Python runtime extra. Keep local reports usable without an LLM or network. Do not introduce Phoenix, a cloud database, Docker, keylogging or continuous screenshots as required dependencies.
+
+## Public repository maintenance
+
+For user-authorized improvements, document concrete triggers, fix the problem, run meaningful affected checks, and promptly commit and push validated changes to the configured upstream. Keep a readable changelog for material behavior changes. Do not claim an Actions pass until the run for the pushed commit completes.
+
+Keep deployment-specific reports, machine inventories, raw logs, settings, credentials and private acceptance records outside this repository. Before public pushes, inspect staged files and commit identities for personal data; use a noreply author address. Do not broaden credentials merely to upload a workflow when a narrower existing authenticated path is available.

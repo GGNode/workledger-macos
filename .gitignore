@@ -18,6 +18,7 @@ real-fixtures/
 # Local executor metadata and private acceptance artifacts
 .omo/
 .omc/
+.codegraph
 .codegraph/
 reports/
 inbox/

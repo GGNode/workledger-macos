@@ -18,7 +18,7 @@ Node 22 用于 CI。jsdom 仅为开发依赖，由 lockfile 固定；不安装�
 
 在仓库 Settings → Actions → General 启用 Actions。工作流只使用官方 actions/checkout、setup-python、setup-node，保留默认只读令牌权限。不要为测试开启写权限、PR 审批权限或自托管运行器。
 
-若 gh 的 OAuth 凭据不能推送 workflow，可通过 `gh auth refresh -h github.com -s workflow` 补充 workflow scope（浏览器需账户本人确认），或使用本来就有相应权限的认证方式。不要将 token 提交到仓库。上传后必须查看实际运行结果，文件存在不代表 CI 已通过。
+若 gh 的 OAuth 凭据不能推送 workflow，可通过 `gh auth refresh -h github.com -s workflow` 补充 workflow scope（浏览器需账户本人确认），或使用本来就有相应权限的认证方式。不要将 token 提交到仓库。已登录的 GitHub 网页也可以直接创建 `.github/workflows/tests.yml`，不需要扩大 CLI 的 OAuth 权限。网页提交前开启账号的 Keep my email addresses private，避免提交作者邮箱暴露。上传后必须查看实际运行结果，文件存在不代表 CI 已通过。
 
 ## 本机升级
 
