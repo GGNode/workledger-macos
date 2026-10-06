@@ -26,6 +26,17 @@ from support_analysis import load_fixture, ExpectedResponseReplay
 DAY='2026-10-06';AT='2026-10-06T09:00:00Z';LATER='2026-10-06T10:00:00Z'
 
 class ProductTests(unittest.TestCase):
+    def test_report_does_not_wait_for_active_collection(self):
+        self.store.event('test','snapshot','note',occurred_at=AT,text='confirmed synthetic note',actor='human')
+        self.store.conn.commit()
+        started=time.monotonic()
+        with processing_lock(self.cfg), patch('workledger.ingest.collect',side_effect=AssertionError('must not start concurrent collection')):
+            path=capture_and_report(self.cfg,day=DAY,open_after=False)
+        self.assertLess(time.monotonic()-started,2)
+        report=json.loads((path.parent/'report.json').read_text())
+        self.assertTrue(report['coverage']['capture_pending'])
+        self.assertIn('已提交的数据快照',path.read_text())
+        self.assertEqual(report['stats']['human_confirmed'],1)
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
         self.cfg=Config(self.root/'data');self.cfg.save({'timezone':'UTC','report_open':False})

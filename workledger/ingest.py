@@ -134,6 +134,9 @@ def collect(config: Config, store: Store, *, force=False) -> dict:
                 else:
                     store.resolve_issue(key)
                 store.cache_set(key, signature)
+                # Preserve completed files on restart; don't hold one write
+                # transaction across the entire historical corpus.
+                store.conn.commit()
                 total += 1
             except Exception as e:
                 try:
@@ -142,6 +145,7 @@ def collect(config: Config, store: Store, *, force=False) -> dict:
                 except Exception:
                     pass
                 store.issue(key, source, f"{path.name}: {type(e).__name__}: {e}")
+                store.conn.commit()
     from .documents import collect_documents
     collect_documents(config, store)
     if c["sources"]["activitywatch"].get("enabled"):

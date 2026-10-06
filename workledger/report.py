@@ -70,7 +70,7 @@ def brief(event: dict) -> str:
     return short_result(event["text"]) if event["kind"] == "agent_message" else clip(event["text"], 160)
 
 
-def build_report(config: Config, store: Store, day: str | None = None, *, refresh_analysis=False, analysis_client=None) -> dict:
+def build_report(config: Config, store: Store, day: str | None = None, *, refresh_analysis=False, analysis_client=None, capture_pending=False) -> dict:
     day = day or today(config.data["timezone"])
     start, end = day_bounds(day, config.data["timezone"])
     events = [e for e in store.events(start, end) if not e["metadata"].get("exclude_from_brief")]
@@ -186,6 +186,13 @@ def build_report(config: Config, store: Store, day: str | None = None, *, refres
     output["excluded_events"] = [{"id": e["id"], "source": e["source"], "session_id": e.get("session_id"), "reason": excluded_ids[e["id"]]} for e in excluded_events]
     output["legacy_headline"] = output["headline"]
     a = output["analysis"]
+    output["coverage"]["capture_pending"] = capture_pending
+    if capture_pending:
+        notice = "后台采集尚未完成，本报告使用已提交的数据快照；未提交的新记录尚未纳入，可在采集完成后重新生成。"
+        output["coverage"]["issues"].append(notice)
+        a["warnings"].append({"stage": "collector", "code": "capture_pending", "detail": notice})
+        if a["status"] == "complete":
+            a["status"] = "partial"
     output["headline"] = (a["highlights"][0]["text"] if a["highlights"] else
                           f"{len(a['themes'])} 项工作 · " + ("观察摘要，尚未完成语义分析" if a["status"] in {"disabled", "degraded"} else "查看进展与验证边界"))
     # A compatibility alias, never a separately generated model response.
@@ -205,7 +212,7 @@ def render_markdown(report: dict) -> str:
     return render(report)
 
 
-def write_report(config: Config, store: Store, day=None, *, refresh_analysis=False, analysis_client=None) -> Path:
+def write_report(config: Config, store: Store, day=None, *, refresh_analysis=False, analysis_client=None, capture_pending=False) -> Path:
     from .analysis.publish import publish
-    r = build_report(config, store, day, refresh_analysis=refresh_analysis, analysis_client=analysis_client)
+    r = build_report(config, store, day, refresh_analysis=refresh_analysis, analysis_client=analysis_client, capture_pending=capture_pending)
     return publish(config, r)

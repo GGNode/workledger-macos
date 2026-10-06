@@ -40,7 +40,7 @@ def main_issues(theme):
     return [p for p in theme["issues"] if p["state"] != "resolved" and p["severity"] in {"material", "blocking"}]
 
 
-def status_message(a):
+def _status_message(a):
     if a["status"] == "disabled":
         return "当前没有调用模型。下面只说明哪些记录已有执行依据、哪些仍不能确认，不将日志片段冒充工作分析。可在控制面板选择 OpenCode 或其他分析后端。"
     if a["status"] == "empty":
@@ -52,6 +52,11 @@ def status_message(a):
         c = a["coverage"]
         return f'已完整分析 {c["evidence_analyzed"]}/{c["today_evidence"]} 条可用证据。部分分块、主题归并或全天综合未完成；已生成的分析与未分析记录分开保留。'
     return ""
+
+
+def status_message(a):
+    notices = [w["detail"] for w in a["warnings"] if w["code"] == "capture_pending"]
+    return _status_message(a) + (" " + " ".join(notices) if notices else "")
 
 
 def evidence_html(r, a):

@@ -13,10 +13,10 @@ from .util import now, stamp
 
 
 @contextmanager
-def processing_lock(config: Config, name="capture"):
+def processing_lock(config: Config, name="capture", *, blocking=True):
     path = config.home / (name + ".lock")
     with path.open("a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        fcntl.flock(f, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         try:
             yield
         finally:
@@ -50,11 +50,17 @@ def capture_and_report(config: Config, *, day=None, open_after=None, refresh_ana
     # Separate report serialization from collection: slow inference never holds
     # capture.lock or an open write transaction.
     with processing_lock(config, "report"):
+        capture_pending = False
         if collect_first:
-            with processing_lock(config), Store(config.db_path) as store:
-                collect(config, store)
+            try:
+                with processing_lock(config, blocking=False), Store(config.db_path) as store:
+                    collect(config, store)
+            except BlockingIOError:
+                capture_pending = True
         with Store(config.db_path) as store:
-            path = write_report(config, store, day, refresh_analysis=refresh_analysis)
+            store.conn.execute('BEGIN')
+            path = write_report(config, store, day, refresh_analysis=refresh_analysis,
+                                capture_pending=capture_pending)
     if open_after if open_after is not None else config.data["report_open"]:
         open_output(config, path)
     return path

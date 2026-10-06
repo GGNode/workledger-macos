@@ -249,6 +249,23 @@ class DocumentTests(Base):
         with self.assertRaises(ValueError):self.cfg.save({'projects':[{'name':'all','paths':[str(Path.home())]}]})
 
 class IngestionTests(Base):
+    def test_completed_file_is_committed_before_next_file_failure(self):
+        first=self.putlog('first.jsonl',[{}]);second=self.putlog('second.jsonl',[{}])
+        sources={name:{**opts,'enabled':False} for name,opts in self.cfg.data['sources'].items()}
+        sources['codex'].update(enabled=True,paths=[str(first),str(second)])
+        self.cfg.save({'sources':sources})
+        observed=[]
+        def parser(rows,path,store):
+            store.event('test',path.name,'note',occurred_at=AT)
+            if path==second.resolve():
+                with sqlite3.connect(self.cfg.db_path) as reader:
+                    observed.append(reader.execute('SELECT count(*) FROM events').fetchone()[0])
+                raise ValueError('synthetic parser failure after partial write')
+        with patch.dict('workledger.ingest.PARSERS',{'codex':parser}):
+            collect(self.cfg,self.store)
+        self.assertEqual(observed,[1])
+        self.assertEqual(self.store.summary()['events'],1)
+        self.assertEqual(self.events()[0]['native_id'],'first.jsonl')
     def test_partial_last_json_record(self):
         p=self.root/'a';p.write_bytes(b'{"ok":1}\n{"incomplete":');rows,warnings=read_rows(p,1000);self.assertEqual(rows,[{'ok':1,'__workledger_line_number':1}]);self.assertTrue(warnings)
     def test_valid_json_without_newline_is_not_committed(self):
