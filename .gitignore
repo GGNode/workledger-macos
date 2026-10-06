@@ -14,3 +14,14 @@ node_modules/
 real-fixtures/
 *.vsix
 !examples/*.html
+
+# Local executor metadata and private acceptance artifacts
+.omo/
+.omc/
+.codegraph/
+reports/
+inbox/
+real-fixtures/
+config.json
+token
+*.log

@@ -4,7 +4,7 @@
 
 ## 可直接交给 Codex 的任务
 
-> 阅读本仓库 AGENTS.md、docs/ADAPTERS.md 和这份交接。先运行现有测试，再检查本机 Python、macOS、各 Agent 版本及其实际日志路径。不要读取 API key、认证文件或整块磁盘。用本机最小脱敏样本验证各解析器，修复不匹配字段，补回归测试。验证主会话与子会话、fork、当天与历史消息、人工确认与 Agent 写入区分。安装并验收控制面板、手动日报、launchd 定时、Finder 打开、网页扩展。最终报告只列真正通过的验收项，不能把 found 文件当作适配成功。用户已授权将本工具放在自己的 GitHub 新私有仓库中；使用本机 gh 验证账号 YOUR_GITHUB_ACCOUNT 后运行发布脚本，已有同名仓库时先检查，不强推、不覆盖其他仓库。
+> 阅读本仓库 AGENTS.md、docs/ADAPTERS.md 和这份交接。先运行现有测试，再检查本机 Python、macOS、各 Agent 版本及其实际日志路径。不要读取 API key、认证文件或整块磁盘。用本机最小脱敏样本验证各解析器，修复不匹配字段，补回归测试。验证主会话与子会话、fork、当天与历史消息、人工确认与 Agent 写入区分。安装并验收控制面板、手动日报、launchd 定时、Finder 打开、网页扩展。最终报告只列真正通过的验收项，不能把 found 文件当作适配成功。发布时遵循用户明确指定的账号、仓库和可见性。使用本机 gh 验证目标账号，已有同名仓库时先检查，不强推、不覆盖其他仓库。
 
 ## 1. 确认本机实际环境
 
@@ -102,7 +102,7 @@ launchctl print gui/$(id -u)/local.workledger.agent
 
 ## 7. GitHub 交付
 
-当前远端仓库未创建，因为连接器缺少该动作。开发环境没有 gh 或 GitHub token。源码没有使用其他已有仓库作为替代。
+发布需要本机已有 GitHub CLI 登录，不要把凭据放入源码或报告。
 
 本机使用用户自己的已授权 gh 会话：
 
@@ -112,4 +112,4 @@ gh api user --jq .login
 bash scripts/publish-github.sh
 ```
 
-脚本默认目标 `YOUR_GITHUB_ACCOUNT/workledger-macos`，私有，不覆盖同名仓库，不强推。创建成功后以 `gh repo view` 返回的真实 URL 交付；不能预写一个不存在的仓库链接。需要继续开发时 clone 刚创建的远端，不要把个人 data 目录当仓库。
+脚本默认使用当前 gh 登录账号，仓库名为 `workledger-macos`，私有，不覆盖同名仓库，不强推。创建成功后以 `gh repo view` 返回的真实 URL 交付；不能预写一个不存在的仓库链接。需要继续开发时 clone 刚创建的远端，不要把个人 data 目录当仓库。

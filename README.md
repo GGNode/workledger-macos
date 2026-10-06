@@ -89,15 +89,17 @@ python3 -m unittest discover -s tests -v
 node --test tests/*.test.js
 ```
 
-开发环境已通过 **76 个 Python 测试、14 个 JavaScript 测试**，另做离线浏览器页面检查。真实 Mac 的 launchd、Finder、权限、真实 Agent 日志和在线聊天站点未在此环境运行验证。完整记录见 [测试报告](docs/TEST_REPORT.md)。
+测试使用合成数据；实际采集范围取决于各 Agent 的日志版本与本机配置。参见 [测试记录](docs/TEST_REPORT.md) 与 [公开发布及 CI](docs/PUBLIC_RELEASE.md)。
 
-GitHub 账号为 `YOUR_GITHUB_ACCOUNT`。交付环境的连接器没有新建仓库动作，因此**尚未在远端创建仓库**。在本机已有 GitHub CLI 登录的情况下运行：
+发布到你自己的 GitHub 账号：
 
 ```bash
 bash scripts/publish-github.sh
+# 可选：明确指定目标账号和新仓库名
+WORKLEDGER_GITHUB_OWNER=YOUR_GITHUB_ACCOUNT WORKLEDGER_GITHUB_REPO=workledger-macos bash scripts/publish-github.sh
 ```
 
-脚本校验当前登录账号，创建 **私有** `YOUR_GITHUB_ACCOUNT/workledger-macos`，仅复制源码白名单并推送。遇到同名仓库会停止，不覆盖远端。没有 GitHub CLI 时先安装并运行 `gh auth login`。本机数据、token、报告和数据库不参与发布。
+脚本从当前 `gh` 登录识别账号，创建私有仓库，只发布源码白名单。已有同名仓库时停止，不覆盖远端。公开前应自行检查源码、演示数据和 Git 历史；本机日志、设置、token、报告和数据库不参与发布。
 
 ## 文档
 

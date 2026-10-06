@@ -41,7 +41,7 @@ CHROMIUM_EXECUTABLE="/实际路径/Chromium" python3 tests/render_smoke.py
 
 **实际 Office 与作者身份。** Word/PPT/Excel 测试采用最小合法结构样本，未在 Office for Mac 中逐项保存后验收。文档差异不覆盖完整 Office 渲染语义。常规保存事件不足以证明由本人输入；待确认项不会自动进入本人工作。
 
-**模型摘要和 GitHub 发布。** 默认无模型模式已通过。没有调用真实 Ollama 或远程模型。GitHub 新建仓库未执行；已连接账号 YOUR_GITHUB_ACCOUNT，但当前连接器无新建仓库动作，容器无 gh 或 GitHub 凭证。发布脚本需要用户本机已有 gh 登录。
+**模型摘要和 GitHub 发布。** 默认无模型模式已通过。没有调用真实 Ollama 或远程模型。发布脚本需要用户本机已有 gh 登录；在线 CI 状态以 GitHub Actions 的实际运行结果为准。
 
 ## 结果文件与复现
 

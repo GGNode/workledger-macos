@@ -1,0 +1,7 @@
+{
+  "name": "workledger-test-tools",
+  "private": true,
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

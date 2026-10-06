@@ -2,12 +2,12 @@
 set -euo pipefail
 # Run on the user's own Mac. Uses the user's existing gh OAuth session; no credentials in this project.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OWNER="${WORKLEDGER_GITHUB_OWNER:-YOUR_GITHUB_ACCOUNT}"
 NAME="${WORKLEDGER_GITHUB_REPO:-workledger-macos}"
 command -v gh >/dev/null 2>&1 || { echo '需要 GitHub CLI。安装后运行 gh auth login，再重新运行本脚本。'; exit 1; }
 command -v git >/dev/null 2>&1 || { echo '需要 git。'; exit 1; }
 gh auth status >/dev/null
 LOGIN="$(gh api user --jq .login)"
+OWNER="${WORKLEDGER_GITHUB_OWNER:-$LOGIN}"
 if [ "$LOGIN" != "$OWNER" ]; then echo "当前 gh 账号为 $LOGIN，目标账号为 $OWNER；已停止，未创建仓库。"; exit 1; fi
 if gh repo view "$OWNER/$NAME" >/dev/null 2>&1; then
   echo "仓库 $OWNER/$NAME 已存在；本脚本不覆盖已有远端。请人工检查后推送，或设置 WORKLEDGER_GITHUB_REPO。"
