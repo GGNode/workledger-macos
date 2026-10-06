@@ -321,8 +321,16 @@ class ModelClient:
                 raise AnalysisError("tool_attempt")
             if typ == "error":
                 failure = obj.get("error", {})
-                error = classify_error(json.dumps(failure))
                 data = failure.get("data", {}) if isinstance(failure, dict) else {}
+                if isinstance(failure, dict):
+                    response = {k: failure.get(k) for k in ("name", "message")}
+                    if isinstance(data, dict):
+                        response.update({k: data[k] for k in ("statusCode", "message", "responseBody") if k in data})
+                else:
+                    response = failure
+                # Request bodies can contain old failures quoted as work evidence.
+                # Only the service response may classify the current failure.
+                error = classify_error(json.dumps(response))
                 # Keep provenance without retaining auth headers or request bodies.
                 record["failure"] = {"source": "opencode_error_event", "code": error,
                                      "name": failure.get("name") if isinstance(failure, dict) else None,

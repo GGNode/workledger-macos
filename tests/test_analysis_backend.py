@@ -87,6 +87,10 @@ class BackendTests(unittest.TestCase):
         row=json.loads(next((self.cfg.home/'analysis/runs').glob('*.json')).read_text())
         self.assertEqual(row['failure'],{'source':'opencode_error_event','code':'provider_policy','name':'APIError','http_status':403})
         self.assertNotIn('SYNTHETIC_PRIVATE',json.dumps(row))
+    def test_quoted_failure_in_request_cannot_classify_current_service_error(self):
+        failure={'name':'APIError','data':{'statusCode':503,'message':'Temporary service failure','responseBody':'{"error":"temporary outage"}','requestBodyValues':{'prompt':'Previous FreeTierError 403; authentication expired'}}}
+        self.program('import json\nprint(json.dumps('+repr({'type':'error','error':failure})+'))')
+        self.assert_error('provider',lambda:self.request())
     def test_rejected_permission_is_not_accepted_as_analysis(self):
         self.program('import json,sys\nsys.stdin.read()\nprint(json.dumps({"type":"tool_use","sessionID":"rejected","part":{"tool":"read","state":{"status":"error","error":"The user rejected permission to use this specific tool call."}}}),flush=True)\nprint(json.dumps({"type":"text","part":{"text":json.dumps({"ok":True})}}),flush=True)')
         self.assert_error('tool_attempt',lambda:self.request())

@@ -46,6 +46,16 @@ class ReadabilityTests(Base):
         self.assertEqual(a['coverage']['evidence_analyzed'],a['coverage']['today_evidence'])
         self.assertEqual(a['coverage']['tasks_analyzed'],6)
         self.assertEqual(self.replay.stages,['map','route','theme','theme','theme','theme','day'])
+    def test_unanalyzed_observations_stay_out_of_main_narrative(self):
+        r=self.fixture_report();theme=copy.deepcopy(r['analysis']['themes'][0])
+        theme.update(id='pending-only',title='Synthetic pending observations',analysis_status='observation_only')
+        r['analysis']['themes'].append(theme);r['analysis']['status']='partial'
+        html=render_html(r);main=html.split('id="main-narrative"',1)[1].split('class="evidence-area"',1)[0]
+        self.assertNotIn(theme['title'],main)
+        folded=html.split('id="unanalyzed"',1)[1].split('</details>',1)[0]
+        self.assertIn(theme['title'],folded)
+        md=render_markdown(r);self.assertNotIn(theme['title'],md.split('<details><summary>尚未形成语义分析的记录</summary>',1)[0])
+        self.assertIn(theme['title'],md);self.assertEqual(r['analysis']['themes'][-1],theme)
     def test_semantic_merging_never_rewrites_native_lineage(self):
         before=None
         r=self.fixture_report();before=self.store.all_sessions()
@@ -225,6 +235,16 @@ class EvidencePlanningTests(Base):
         p=self.plan()
         self.assertTrue(all(len({r['task_id'] for r in b})<=16 for b in p['packets']))
         self.assertEqual(len({r['task_id'] for b in p['packets'] for r in b}),120)
+    def test_early_packet_includes_later_delivery_without_changing_time_or_actor(self):
+        request=self.store.event('x','request','user_message',occurred_at=AT,text='Write the synthetic review',session_id='task')
+        delivery=self.store.event('x','delivery','agent_message',occurred_at=LATER,text='Synthetic review delivered; no independent runtime test',session_id='task',actor='agent')
+        write=self.store.event('x','write','file_edit',occurred_at=LATER,text='synthetic review written',session_id='task',actor='agent',evidence='successful_tool_result')
+        p=self.plan();r=next(r for batch in p['packets'] for r in batch if r['id']==request)
+        data=packet_input(p,[r],self.cfg);context={e['id']:e for e in data['context']}
+        self.assertIn(delivery,context);self.assertIn(write,context)
+        self.assertEqual(context[delivery]['at'],p['evidence'][delivery]['occurred_at']);self.assertEqual(context[delivery]['actor'],'agent')
+        self.assertEqual(context[delivery]['scope'],'today');self.assertTrue(data['tasks'][0]['partial_task_input'])
+        self.assertEqual(context[write]['evidence'],'successful_tool_result')
     def test_undated_web_history_does_not_become_today(self):
         self.store.event('chatgpt','old','agent_message',observed_at=AT,actor='agent',text='old without creation time')
         self.assertEqual(self.plan()['today_ids'],[])

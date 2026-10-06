@@ -79,6 +79,15 @@ def evidence_html(r, a):
     if not r["coverage"]["issues"]:
         out += '<p class="audit">当前没有活跃采集错误。此状态不保证所有软件和工作目录均已配置。</p>'
     out += f'<p class="audit">无可靠源时间的记录 {r["stats"]["undated_excluded"]} 条未纳入当天成果。</p></details>'
+    pending = [t for t in a["themes"] if t.get("analysis_status") == "observation_only"]
+    if pending:
+        out += '<details id="unanalyzed"><summary>尚未形成语义分析的记录</summary><p class="audit">以下仅为观察摘要，不表示相应工作没有发生或已经完成。</p>'
+        for t in pending:
+            out += '<section><h3>'+esc(t['title'])+'</h3>'
+            for section in ("work", "results", "remaining"):
+                out += ''.join(show_claim(c) for c in t[section])
+            out += '</section>'
+        out += '</details>'
     out += '<details id="evidence"><summary>展开原始消息、工具结果、文档变化与引用依据</summary>'
     all_evidence = {e["id"]: e for e in r["events"]}
     all_evidence.update(a.get("evidence", {}))
@@ -126,7 +135,7 @@ def render_html(r):
     if a["highlights"]:
         out += '<section class="hero" aria-label="今日重点"><h2>今日重点</h2>'+''.join(show_claim(c) for c in a["highlights"])+'</section>'
     out += '<div class="layout"><div class="content" id="main-narrative">'
-    for n, theme in enumerate(a["themes"], 1):
+    for n, theme in enumerate((t for t in a["themes"] if t.get("analysis_status") != "observation_only"), 1):
         cls = ' observation' if theme.get("analysis_status") == "observation_only" else ''
         out += f'<article class="topic{cls}" id="topic-{esc(theme["id"])}"><div class="topic-title"><h2>{esc(theme["title"])}</h2><span class="number">{n:02}</span></div><div class="sections">'
         for section in ("work", "results"):
@@ -154,6 +163,8 @@ def render_html(r):
         out += '</article>'
     out += '</div><aside class="aside"><h3>工作主题</h3><nav>'
     for t in a["themes"]:
+        if t.get("analysis_status") == "observation_only":
+            continue
         out += f'<a href="#topic-{esc(t["id"])}">{esc(t["title"])}</a>'
     out += '<a href="#audit">依据与覆盖情况</a></nav><p>'+esc(a["transport"]["data_flow"])+'.</p><p>阅读已有报告不会触发新的模型调用。事实、Agent 自述和建议各自标注。</p></aside></div>'
     out += evidence_html(r, a)
@@ -184,6 +195,8 @@ def render_markdown(r):
         for c in a["highlights"]:
             lines += [statement(c), '']
     for theme in a["themes"]:
+        if theme.get("analysis_status") == "observation_only":
+            continue
         lines += ['## '+md_text(theme["title"]), '']
         for section in ("work", "results", "remaining"):
             if theme[section]:
@@ -206,6 +219,15 @@ def render_markdown(r):
                 if p.get("resolution"):
                     lines += [statement(p["resolution"]), '']
             lines += ['</details>', '']
+    pending = [t for t in a["themes"] if t.get("analysis_status") == "observation_only"]
+    if pending:
+        lines += ['<details><summary>尚未形成语义分析的记录</summary>', '', '以下仅为观察摘要，不表示相应工作没有发生或已经完成。', '']
+        for t in pending:
+            lines += ['### '+md_text(t['title']), '']
+            for section in ("work", "results", "remaining"):
+                for c in t[section]:
+                    lines += [statement(c), '']
+        lines += ['</details>', '']
     c = a["coverage"]
     lines += ['## 覆盖与依据', '', f'完整分析 {c["evidence_analyzed"]}/{c["today_evidence"]} 条证据，{c["tasks_analyzed"]}/{c["tasks_total"]} 个原生任务。', '',
               '归属标记只说明来源；缺少本人确认，不代表本人没有工作。采集器状态与任务阻塞分开记录。', '',

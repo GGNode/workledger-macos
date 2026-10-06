@@ -206,8 +206,17 @@ def packet_input(plan, records, config):
     # Bound repeated context separately; its time/scope is always explicit.
     budget = config.data["analysis"]["context_chars"]
     context_ids = []
+    closing_ids = []
     for tid in tids:
         task = plan["tasks"][tid]
+        # Later same-day closing evidence prevents an early request packet from
+        # being mistaken for the task's final state. Native times/actors remain.
+        replies_today = [e for e in task["events"] if e["kind"] == "agent_message"]
+        if replies_today:
+            closing_ids.append(replies_today[-1]["id"])
+        settled_writes = [e for e in task["events"] if e["kind"] == "file_edit" and e.get("evidence") == "successful_tool_result"]
+        if settled_writes:
+            closing_ids.append(settled_writes[-1]["id"])
         # Same-day purpose and the latest prior decision keep later tool-heavy
         # chunks interpretable. Their scope remains today, not invented history.
         cutoff = min((r.get("at") or "" for r in records if r["task_id"]==tid), default="")
@@ -222,7 +231,7 @@ def packet_input(plan, records, config):
     context_ids += [r["possible_retry_success"] for r in records if r.get("possible_retry_success")]
     used = 0
     omitted = []
-    for eid in dict.fromkeys(context_ids):
+    for eid in dict.fromkeys(closing_ids + context_ids):
         if eid in direct or eid not in plan["evidence"]:
             continue
         e = plan["evidence"][eid]
@@ -237,5 +246,8 @@ def packet_input(plan, records, config):
                         "truncated": len(text)<len(body)})
         used += len(text)
     return {"tasks": [{"id": tid, "workspace": plan["tasks"][tid]["workspace"],
-                       "native_session_ids": plan["tasks"][tid]["session_ids"]} for tid in tids],
+                       "native_session_ids": plan["tasks"][tid]["session_ids"],
+                       "today_evidence_count": len(plan["tasks"][tid]["events"]),
+                       "partial_task_input": any(e["id"] not in direct for e in plan["tasks"][tid]["events"]) or
+                                             any(r["parts"] > 1 for r in records if r["task_id"] == tid)} for tid in tids],
             "records": records, "context": context, "context_omitted_ids": omitted}
