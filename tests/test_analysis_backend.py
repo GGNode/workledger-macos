@@ -111,6 +111,16 @@ class BackendTests(unittest.TestCase):
         started=time.monotonic();client=ModelClient(self.cfg)
         self.assert_error('timeout',lambda:self.request(client));self.assertLess(time.monotonic()-started,3)
         self.assertEqual(client.calls,1)
+    def test_timeout_allows_one_reduction_phase_with_same_budget(self):
+        client=ModelClient(self.cfg);client.errors=[{'code':'timeout'}];client.disabled_until=time.monotonic()+300
+        client.calls=4;started=client.started;client.begin_reduction()
+        self.assertEqual(client.disabled_until,0);self.assertEqual(client.calls,4);self.assertEqual(client.started,started)
+        client.disabled_until=time.monotonic()+300;client.begin_reduction()
+        self.assertGreater(client.disabled_until,time.monotonic())
+    def test_reduction_cannot_reopen_service_policy_or_auth_failure(self):
+        for code in ['provider_policy','authentication','unavailable','tool_attempt']:
+            client=ModelClient(self.cfg);client.errors=[{'code':code}];client.disabled_until=time.monotonic()+300
+            client.begin_reduction();self.assertGreater(client.disabled_until,time.monotonic())
     def test_cache_reuses_valid_response_no_cli_relaunch(self):
         self.respond();client=ModelClient(self.cfg);self.request(client);self.request(client)
         self.assertEqual(client.calls,1);self.assertEqual(client.hits,1)

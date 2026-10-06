@@ -187,6 +187,7 @@ class ModelClient:
         self.actual_models: set[str] = set()
         self.exhausted = False
         self.disabled_until = 0.0
+        self.reduction_resumed = False
 
     def _key(self, stage, data, instruction):
         exe = executable(self.opts) if self.opts["mode"] == "opencode" else None
@@ -261,6 +262,16 @@ class ModelClient:
                     time.sleep(min(1.0, max(0, remaining)))
         atomic_write(path, json.dumps({"stored_at": time.time(), "error": last_error.code}))
         raise last_error
+
+    def begin_reduction(self):
+        """One phase transition after a slow map; never reopen auth/policy errors.
+
+        A large raw packet timing out does not imply a small semantic reduction
+        is unavailable. Calls and elapsed time still share the original budget.
+        """
+        if not self.reduction_resumed and self.errors and self.errors[-1]['code'] == 'timeout':
+            self.disabled_until = 0.0
+            self.reduction_resumed = True
 
     def _invoke(self, prompt: str, timeout: float, stage: str) -> str:
         if self.opts["mode"] == "opencode":

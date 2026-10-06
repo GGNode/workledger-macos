@@ -13,7 +13,7 @@ from workledger.config import Config
 from workledger.store import Store
 from workledger.util import digest, day_bounds
 from workledger.analysis.publish import publish
-from workledger.analysis.pipeline import consolidate
+from workledger.analysis.pipeline import consolidate, analyze
 from workledger.analysis.backend import AnalysisError
 from workledger.analysis.evidence import prepare, packet_input
 from workledger.report import build_report
@@ -95,6 +95,31 @@ class ProductTests(unittest.TestCase):
                 except ValueError as exc:raise AnalysisError('schema') from exc
         warnings=[];out=consolidate([theme],{'evidence':evidence,'tasks':tasks},DropsBlocker(),theme['title'],60000,warnings)
         self.assertEqual(out[0]['issues'][0]['state'],'open');self.assertEqual(warnings[0]['code'],'schema')
+    def test_mapping_reserves_budget_for_daily_conclusions(self):
+        self.cfg.save({'llm':{'mode':'opencode'},'analysis':{'chunk_chars':3000}})
+        for i in range(2):
+            self.store.event('test','note-'+str(i),'note',occurred_at=AT,text='synthetic confirmed note '+('x'*2000),actor='human',session_id='task-'+str(i))
+        self.store.conn.commit()
+        class SlowMap:
+            def __init__(self):
+                self.started=time.monotonic()-400;self.calls=0;self.stages=[];self.actual_models=set()
+            def request(self,stage,data,instruction,validator):
+                self.calls+=1;self.stages.append(stage)
+                if stage=='map':
+                    rows=data['records'];r=rows[0]
+                    c={'text':'Confirmed synthetic work','evidence_ids':list(dict.fromkeys(v['id'] for v in rows)),'basis':'human_confirmed','scope':'today'}
+                    self.work={'title':'Synthetic work','task_ids':list(dict.fromkeys(v['task_id'] for v in rows)),'work':[c],'results':[],'remaining':[],'suggestions':[],'issues':[]}
+                    value={'items':[self.work],'accounted_ids':list(dict.fromkeys(v['id'] for v in rows)),'ignored':[]}
+                elif stage=='route':value={'groups':[{'title':'Synthetic work','item_ids':[v['id'] for v in data['catalog']]}]}
+                elif stage=='theme':value={**self.work,'covered_item_ids':[v['id'] for v in data['items']]}
+                elif stage=='day':value={'highlights':self.work['work']}
+                else:raise AssertionError(stage)
+                return validator(value)
+        client=SlowMap();plan=prepare(self.cfg,self.store,self.store.events(*day_bounds(DAY,'UTC')),self.store.all_sessions(),DAY)
+        self.assertGreater(len(plan['packets']),1)
+        out=analyze(self.cfg,self.store,self.store.events(*day_bounds(DAY,'UTC')),self.store.all_sessions(),DAY,client=client)
+        self.assertEqual(client.stages,['map','route','theme','day'])
+        self.assertEqual(out['status'],'partial');self.assertTrue(out['highlights']);self.assertTrue(out['coverage']['missing_evidence_ids'])
     def test_map_and_context_preserve_tool_settlement_provenance(self):
         self.store.event('test','ok','tool_result',occurred_at=AT,text='synthetic output',actor='agent',session_id='synthetic-session',metadata={'success':True})
         self.store.event('test','bad','tool_result',occurred_at=LATER,text='synthetic failure',actor='agent',session_id='synthetic-session',metadata={'success':False})

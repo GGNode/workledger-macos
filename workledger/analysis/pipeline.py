@@ -6,6 +6,7 @@ responses, keyword-based topic replacement, or pre-rendered report cards.
 from __future__ import annotations
 
 import json
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -228,6 +229,11 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
     items = []
     warnings = output["warnings"]
     for n, records in enumerate(plan["packets"][:opts["max_map_packets"]]):
+        # Keep time for routing and daily conclusions instead of spending the
+        # entire deadline on raw packets. Missing packets remain explicit.
+        if items and hasattr(client, "started") and time.monotonic()-client.started >= opts["total_timeout"] * .4:
+            warnings.append({"stage": "map", "code": "budget", "detail": "保留剩余预算用于已分析证据的主题归并与今日重点；原始证据尚未全部覆盖"})
+            break
         progress(config, day, "理解任务证据", n, len(plan["packets"]))
         data = packet_input(plan, records, config)
         data.update(date=day, timezone=config.data["timezone"])
@@ -261,6 +267,8 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
         warnings.append({"stage": "coverage", "code": "budget" if len(plan["packets"]) > opts["max_map_packets"] else "incomplete",
                          "detail": "尚有未完整分析的证据，已保留观察摘要，不代表这些工作没有发生"})
     if items:
+        if hasattr(client, "begin_reduction"):
+            client.begin_reduction()
         progress(config, day, "归并工作主题", 0, len(items))
         groups = route_items(items, plan, client, opts["chunk_chars"], warnings)
         by_id = {v["id"]: v for v in items}
