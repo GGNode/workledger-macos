@@ -31,3 +31,4 @@ jobs:
       - run: python -m compileall -q workledger
       - run: for script in scripts/*.sh *.command; do bash -n "$script"; done
       - run: python -m workledger demo --output "$RUNNER_TEMP/workledger-demo" --no-open
+      - run: python scripts/render-analysis-fixture.py --output "$RUNNER_TEMP/workledger-analysis-fixture"
