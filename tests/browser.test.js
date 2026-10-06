@@ -1,0 +1,15 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');const {WorkLedgerTracker}=require('../extensions/browser/tracker');
+const at='2026-10-06T09:00:00Z',later='2026-10-06T09:00:05Z';
+const msg=(id,role,text)=>({id,role,text});
+test('initial old conversation is baseline',()=>{const t=new WorkLedgerTracker();assert.deepEqual(t.scan('old',[msg('a','user','old text')],at),[]);});
+test('scrolling older messages is not today work',()=>{const t=new WorkLedgerTracker();t.scan('old',[msg('b','assistant','old reply')],at);assert.deepEqual(t.scan('old',[msg('a','user','older'),msg('b','assistant','old reply')],later),[]);});
+test('trusted submission and its answer are captured',()=>{const t=new WorkLedgerTracker();t.scan('old',[],at);t.submit('new task',at,true);const out=t.scan('old',[msg('u','user','new task'),msg('a','assistant','answer')],later);assert.equal(out.length,2);assert.equal(out[0].occurred_at,at);assert.equal(out[1].chronology,'live_observed');});
+test('untrusted DOM submission ignored',()=>{const t=new WorkLedgerTracker();t.scan('old',[],at);t.submit('fake',at,false);assert.equal(t.scan('old',[msg('u','user','fake')],later).length,0);});
+test('streaming answer revisions retain original time',()=>{const t=new WorkLedgerTracker();t.scan('c',[],at);t.submit('q',at,true);t.scan('c',[msg('u','user','q'),msg('a','assistant','half')],later);const out=t.scan('c',[msg('u','user','q'),msg('a','assistant','complete')],'2026-10-06T09:00:10Z');assert.equal(out.length,1);assert.equal(out[0].occurred_at,later);});
+test('history updates are not counted',()=>{const t=new WorkLedgerTracker();t.scan('c',[msg('a','assistant','old')],at);assert.equal(t.scan('c',[msg('a','assistant','changed old')],later).length,0);});
+test('unrelated user row cannot match a pending submission',()=>{const t=new WorkLedgerTracker();t.scan('c',[],at);t.submit('new',at,true);assert.equal(t.scan('c',[msg('u','user','old'),msg('a','assistant','old answer')],later).length,0);});
+test('new conversation after submit can capture',()=>{const t=new WorkLedgerTracker();t.submit('hello',at,true);assert.equal(t.scan('new-c',[msg('u','user','hello'),msg('a','assistant','hi')],later).length,2);});
+test('new route without a submission stays baseline',()=>{const t=new WorkLedgerTracker();t.scan('c',[],at);assert.equal(t.scan('older',[msg('a','assistant','old')],later).length,0);});
+test('expired submission cannot claim future history',()=>{const t=new WorkLedgerTracker();t.scan('c',[],at);t.submit('q',at,true);assert.equal(t.scan('c',[msg('u','user','q')],'2026-10-06T10:00:00Z').length,0);});
+test('unchanged DOM creates no duplicates',()=>{const t=new WorkLedgerTracker();t.submit('q',at,true);const rows=[msg('u','user','q'),msg('a','assistant','answer')];t.scan('c',rows,later);assert.equal(t.scan('c',rows,later).length,0);});

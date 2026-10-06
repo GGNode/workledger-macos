@@ -1,0 +1,19 @@
+{
+  "name": "workledger-evidence",
+  "displayName": "WorkLedger Evidence",
+  "version": "0.1.0",
+  "publisher": "workledger-local",
+  "description": "Capture saved text changes as unattributed evidence for your local work report.",
+  "engines": {"vscode": "^1.85.0"},
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "extensionKind": ["ui"],
+  "contributes": {
+    "commands": [{"command":"workledger.openPanel","title":"WorkLedger: Open Local Review Panel"}],
+    "configuration": {"title":"WorkLedger","properties":{
+      "workledger.enabled":{"type":"boolean","default":false,"description":"Opt in to collecting saved text changes in configured WorkLedger project paths."},
+      "workledger.dataHome":{"type":"string","default":"","description":"WorkLedger data directory; empty uses ~/Library/Application Support/WorkLedger."}
+    }}
+  }
+}

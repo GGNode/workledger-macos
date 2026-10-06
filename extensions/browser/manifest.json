@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "WorkLedger · 本机聊天记录",
+  "version": "0.1.0",
+  "description": "将指定 AI 网页的新消息送至你自己的 WorkLedger 本机服务。旧页面基线不会算入今天。",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_popup": "options.html"},
+  "options_page": "options.html",
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*"],
+    "js": ["tracker.js", "content.js"],
+    "run_at": "document_idle"
+  }]
+}

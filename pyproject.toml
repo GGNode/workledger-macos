@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workledger-macos"
+version = "0.1.0"
+description = "Local-first, evidence-aware daily work reports for humans and coding agents"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "WorkLedger contributors"}]
+dependencies = []
+
+[project.optional-dependencies]
+zstd = ["zstandard>=0.22,<1"]
+
+[project.scripts]
+workledger = "workledger.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["workledger*"]
+
+[tool.setuptools.package-data]
+workledger = ["static/*"]

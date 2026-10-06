@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.DS_Store
+*.sqlite*
+*.db
+.env*
+node_modules/
+.local/
+.workledger*/
+real-fixtures/
+*.vsix
+!examples/*.html
