@@ -15,7 +15,7 @@ from workledger.util import digest, day_bounds
 from workledger.analysis.publish import publish
 from workledger.analysis.pipeline import consolidate
 from workledger.analysis.backend import AnalysisError
-from workledger.analysis.evidence import prepare
+from workledger.analysis.evidence import prepare, packet_input
 from workledger.report import build_report
 from workledger.runtime import capture_and_report, processing_lock
 from workledger.server import make_server
@@ -95,6 +95,18 @@ class ProductTests(unittest.TestCase):
                 except ValueError as exc:raise AnalysisError('schema') from exc
         warnings=[];out=consolidate([theme],{'evidence':evidence,'tasks':tasks},DropsBlocker(),theme['title'],60000,warnings)
         self.assertEqual(out[0]['issues'][0]['state'],'open');self.assertEqual(warnings[0]['code'],'schema')
+    def test_map_and_context_preserve_tool_settlement_provenance(self):
+        self.store.event('test','ok','tool_result',occurred_at=AT,text='synthetic output',actor='agent',session_id='synthetic-session',metadata={'success':True})
+        self.store.event('test','bad','tool_result',occurred_at=LATER,text='synthetic failure',actor='agent',session_id='synthetic-session',metadata={'success':False})
+        self.store.conn.commit()
+        plan=prepare(self.cfg,self.store,self.store.events(*day_bounds(DAY,'UTC')),self.store.all_sessions(),DAY)
+        records=[r for packet in plan['packets'] for r in packet]
+        self.assertEqual({r['success'] for r in records},{True,False})
+        successful=next(e for e in plan['evidence'].values() if e['metadata'].get('success') is True)
+        failed=next(r for r in records if r['success'] is False)
+        plan['tasks'][failed['task_id']]['history_ids']=[successful['id']]
+        data=packet_input(plan,[failed],self.cfg)
+        self.assertTrue(next(c for c in data['context'] if c['id']==successful['id'])['success'])
     def test_collector_issue_does_not_become_task_failure(self):
         self.store.issue('documents','scan','Permission denied')
         self.store.event('x','req','user_message',occurred_at=AT,text='request')

@@ -47,12 +47,13 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(json.loads(os.environ['OPENCODE_CONFIG_CONTENT']),user_inline)
         argv=row['argv'];self.assertEqual(argv[argv.index('--dir')+1],str(self.directory.resolve()));self.assertEqual(Path(row['cwd']).resolve(),self.directory.resolve())
         self.assertNotIn('--model',argv);self.assertNotIn('--pure',argv);self.assertNotIn('--continue',argv)
+        self.assertIn('--no-auto',argv);self.assertIn('--no-interactive',argv)
         self.assertTrue(row['input'].startswith('WORKLEDGER_ANALYSIS_RUN='));self.assertNotIn('synthetic',' '.join(argv))
         self.assertEqual(row['inline']['plugin'],['normal-plugin']);self.assertEqual(row['inline']['model'],user_inline['model'])
         agent=row['inline']['agent'][argv[argv.index('--agent')+1]]
-        self.assertNotIn('model',agent);self.assertEqual(agent['permission'],{'*':'deny'})
+        self.assertNotIn('model',agent);self.assertEqual(agent['permission'],{'*':'ask'})
         self.assertEqual(row['inline']['share'],'disabled')
-        self.assertEqual(json.loads(row['permission']),{'*':'deny'})
+        self.assertEqual(json.loads(row['permission']),{'*':'ask'})
         self.assertFalse((self.cfg.home/'analysis'/'auth.json').exists())
     def test_explicit_model_is_optional_not_hardcoded(self):
         self.cfg.save({'llm':{'model':'chosen/provider-model'}})
@@ -79,6 +80,16 @@ class BackendTests(unittest.TestCase):
         self.assertLess(time.monotonic()-started,2)
         row=json.loads(next((self.cfg.home/'analysis/runs').glob('*.json')).read_text())
         self.assertEqual(row['session_ids'],['bad-session'])
+    def test_provider_failure_provenance_omits_request_and_headers(self):
+        failure={'name':'APIError','data':{'statusCode':403,'message':"OpenCode's free tier can only be used from within OpenCode",'responseBody':'{"type":"FreeTierError"}','requestBodyValues':{'secret':'SYNTHETIC_PRIVATE'},'responseHeaders':{'authorization':'SYNTHETIC_PRIVATE'}}}
+        self.program('import json\nprint(json.dumps('+repr({'type':'error','sessionID':'policy-session','error':failure})+'))')
+        self.assert_error('provider_policy',lambda:self.request())
+        row=json.loads(next((self.cfg.home/'analysis/runs').glob('*.json')).read_text())
+        self.assertEqual(row['failure'],{'source':'opencode_error_event','code':'provider_policy','name':'APIError','http_status':403})
+        self.assertNotIn('SYNTHETIC_PRIVATE',json.dumps(row))
+    def test_rejected_permission_is_not_accepted_as_analysis(self):
+        self.program('import json,sys\nsys.stdin.read()\nprint(json.dumps({"type":"tool_use","sessionID":"rejected","part":{"tool":"read","state":{"status":"error","error":"The user rejected permission to use this specific tool call."}}}),flush=True)\nprint(json.dumps({"type":"text","part":{"text":json.dumps({"ok":True})}}),flush=True)')
+        self.assert_error('tool_attempt',lambda:self.request())
     def test_stream_non_json_is_not_assumed_success(self):
         self.program('print("not-json",flush=True)')
         self.assert_error('invalid_json',lambda:self.request())
@@ -125,6 +136,15 @@ class BackendTests(unittest.TestCase):
         client=ModelClient(self.cfg)
         with patch.object(client,'_invoke',side_effect=['not json','{"ok":true}']) as invoke:
             self.assertEqual(self.request(client),{'ok':True});self.assertEqual(invoke.call_count,2)
+    def test_schema_retry_explains_failed_constraint_to_model(self):
+        client=ModelClient(self.cfg)
+        def validator(obj):
+            if not obj.get('ok'):raise ValueError('no successful tool settlement')
+            return obj
+        with patch.object(client,'_invoke',side_effect=['{"ok":false}','{"ok":true}']) as invoke:
+            result=client.request('test',{'purpose':'synthetic'},'JSON',validator)
+        self.assertEqual(result,{'ok':True})
+        self.assertIn('no successful tool settlement',invoke.call_args_list[1].args[0])
     def test_illegal_schema_repair_is_bounded(self):
         client=ModelClient(self.cfg)
         with patch.object(client,'_invoke',return_value='{"wrong":true}') as invoke:

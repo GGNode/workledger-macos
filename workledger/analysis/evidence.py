@@ -165,6 +165,7 @@ def prepare(config, store, events, sessions, day):
                 records.append({"id": e["id"], "task_id": tid, "scope": "today", "kind": e["kind"],
                                 "actor": e["actor"], "at": e.get("occurred_at"), "source": e["source"],
                                 "artifact": e.get("artifact", ""), "evidence": e.get("evidence", ""),
+                                "success": e.get("metadata", {}).get("success"),
                                 "part": n+1, "parts": size, "content": text[n*segment:(n+1)*segment],
                                 "possible_retry_success": evidence.get("possible_retry_success")})
         queues[tid] = deque(records)
@@ -232,6 +233,7 @@ def packet_input(plan, records, config):
         text = body[:min(2000, remaining)]
         context.append({"id": eid, "task_id": e["task_id"], "scope": e["scope"], "kind": e["kind"],
                         "actor": e["actor"], "at": e.get("occurred_at"), "content": text,
+                        "success": e.get("metadata", {}).get("success"), "evidence": e.get("evidence", ""),
                         "truncated": len(text)<len(body)})
         used += len(text)
     return {"tasks": [{"id": tid, "workspace": plan["tasks"][tid]["workspace"],
