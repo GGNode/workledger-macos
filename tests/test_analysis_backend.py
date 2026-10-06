@@ -103,6 +103,14 @@ class BackendTests(unittest.TestCase):
     def test_invalid_executable_format_is_classified(self):
         self.exe.write_text('not an executable image');self.exe.chmod(0o755)
         self.assert_error('configuration',lambda:self.request())
+    def test_exited_process_group_permission_error_preserves_result(self):
+        self.respond()
+        with patch('workledger.analysis.backend.os.killpg',side_effect=PermissionError('synthetic exited group')):
+            self.assertEqual(self.request(),{'ok':True})
+    def test_group_cleanup_permission_error_does_not_mask_bad_json(self):
+        self.program('print("not-json",flush=True)')
+        with patch('workledger.analysis.backend.os.killpg',side_effect=PermissionError('synthetic group rejection')):
+            self.assert_error('invalid_json',lambda:self.request())
     def test_output_bound_stops_process(self):
         self.cfg.save({'analysis':{'max_output_bytes':1024}});self.program('print("x"*4000,flush=True)')
         self.assert_error('output_limit',lambda:self.request())

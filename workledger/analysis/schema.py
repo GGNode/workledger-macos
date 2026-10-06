@@ -69,8 +69,14 @@ def issue(value, evidence):
         raise ValueError("invalid issue state/severity")
     result = {k: value[k] for k in ("state", "severity")}
     for field in ("problem", "impact"):
-        result[field] = claim(value.get(field), evidence)
-    result["resolution"] = claim(value["resolution"], evidence) if value.get("resolution") else None
+        try:
+            result[field] = claim(value.get(field), evidence)
+        except ValueError as exc:
+            raise ValueError(f"issues.{field}: {exc}; expected object with text/evidence_ids/basis/scope, never a string") from exc
+    try:
+        result["resolution"] = claim(value["resolution"], evidence) if value.get("resolution") else None
+    except ValueError as exc:
+        raise ValueError(f"issues.resolution: {exc}; expected claim object or null, never a string") from exc
     if result["state"] == "resolved":
         if not result["resolution"]:
             raise ValueError("resolved issue needs resolution evidence")

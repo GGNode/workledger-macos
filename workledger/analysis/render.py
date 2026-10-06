@@ -10,7 +10,7 @@ from .backend import MESSAGES
 from .schema import BASIS_LABELS, SECTIONS
 
 STATUS = {"complete": "语义分析已完成", "partial": "部分分析 · 有覆盖缺口", "disabled": "语义分析未启用",
-          "degraded": "模型不可用 · 观察模式", "empty": "暂无可归日证据"}
+          "degraded": "分析未完成 · 观察模式", "empty": "暂无可归日证据"}
 HEADINGS = {"work": "今天做了什么", "results": "进展与影响", "remaining": "未完成与待确认", "suggestions": "建议 · 尚未执行"}
 CSS = """
 :root{color-scheme:light;--bg:#f5f6f3;--paper:#fff;--ink:#1b2d33;--muted:#657575;--line:#e1e7e2;--accent:#17645a;--soft:#eaf3ef;--warn:#895c19;--warn-bg:#faf3e6;--blue:#355f85}

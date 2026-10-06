@@ -166,6 +166,11 @@ def bounded_process(argv: list[str], stdin: str, *, cwd: Path, env: dict,
                 os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            except PermissionError:
+                # macOS may reject signalling an exited process group. Preserve
+                # the parsing/timeout result and terminate our own live child.
+                if proc.poll() is None:
+                    proc.kill()
             proc.wait()
             proc.stdout.close(); proc.stderr.close()
 
