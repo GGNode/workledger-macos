@@ -2,9 +2,9 @@
 
 **适合 Mac 的本机工作简报工具。把本人工作、Agent 产出、文档变化和 AI 网页聊天分开记录，每天生成一份能快速读完的报告。**
 
-版本：0.1.0 · MIT · Python 3.11+ · 默认没有云端服务、外部模型或运行时 Python 依赖。
+版本：0.2.0 · MIT · Python 3.11+ · 默认没有云端服务、外部模型或运行时 Python 依赖。
 
-![日报演示](examples/report-preview.png)
+[查看明确标注的合成分析样例](examples/report.html) · [0.2 升级与本机验收](docs/ANALYSIS_UPGRADE.md)
 
 ## 开始使用
 
@@ -34,9 +34,30 @@ WORKLEDGER_PYTHON="/实际路径/python3" bash scripts/install.sh
 
 ## 报告长什么样
 
-按项目展示本人已确认的工作、当天用户侧指令、每个主任务的简短 Agent 结果及少量写入文件。只展示当天新消息，不把刚打开的旧聊天算成今天完成的工作。完整会话树、原始证据、文档差异均折叠在下面。
+主页面先说明今日重点，再按实际工作主题解释**做了什么、进展或影响、未完成或存在的问题**。不会把原始 prompt、英文 Objective、子 Agent 播报、文件名清单或单条 `bash: failed` 当成工作分析。重要陈述可展开真实证据；工具成功、Agent 自述、用户推动和本人确认分别标记。采集数量移到折叠区域。
 
-`examples/report.html` 是带有明确标记的虚构演示，不包含真实工作数据。默认规则摘要即可使用；需要更自然的综合总结时，可在设置中启用本机 Ollama，或明确启用远程 OpenAI 兼容接口。
+0.2 的分析来自完整保留证据，而非先删减后的展示卡片：按原生任务整理和分块理解，再跨会话归并主题、核查错误恢复与验证范围，最后综合全天。语义合并不改变数据库的主子关系。历史可作背景，不成为今天的新成果。HTML、Markdown、JSON 共用同一分析结果和状态。
+
+`examples/report.html` 是**合成证据 + 人工预期响应回放**的阅读验收样例，不是真实个人日报，也不是实机模型已验收的证明。生产代码不使用预写主题或关键词替换。
+
+## 启用日常 OpenCode 分析
+
+默认仍保留无模型模式，升级不擅自改变已有设置。关闭模型时是明确标记的观察摘要，不能代替语义日报。已安装 OpenCode 的用户，在平时的工作目录中配置：
+
+```bash
+~/.local/bin/workledger analysis configure \
+  --backend opencode --dir "$PWD" --executable "$(command -v opencode)"
+~/.local/bin/workledger analysis status
+~/.local/bin/workledger report --open
+```
+
+也可直接在控制面板选择分析后端，填写 OpenCode 实际路径与工作目录。调用始终显式带 `--dir`；模型为空时不传 `--model`，沿用正常全局模型选择。复用已有登录、配置和插件，不读取或复制认证文件，不创建独立 XDG。分析专用代理通过仅作用于子进程的内联配置禁用工具和共享，不改写用户正常设置。
+
+**从本机调用 OpenCode，不等于推理在本机完成。** 证据会交给其正常提供商及插件，可能发送至远程模型服务。设置面板会说明这一数据流。Ollama 和 OpenAI 兼容接口也走同一证据分析流程；远程 HTTP 接口仍需要明确启用。
+
+调用有单次超时、总预算、严格 JSON/引用/归属校验、有限重试和缓存。打开已有报告不会重新调用模型。模型不可用时保留旧报告和原始证据，展示明确的降级状态；不会拿日志片段伪装成分析。
+
+详细参数、launchd PATH、缓存更新、真实模型阅读验收见 [0.2 交接说明](docs/ANALYSIS_UPGRADE.md)。报告 `analysis.status` 是统一状态字段；`model_summary` 只保留兼容别名。
 
 ## 当前支持范围
 
@@ -89,7 +110,7 @@ python3 -m unittest discover -s tests -v
 node --test tests/*.test.js
 ```
 
-测试使用合成数据；实际采集范围取决于各 Agent 的日志版本与本机配置。参见 [测试记录](docs/TEST_REPORT.md) 与 [公开发布及 CI](docs/PUBLIC_RELEASE.md)。
+测试使用合成数据；实际采集范围取决于各 Agent 的日志版本与本机配置。本轮检验及其边界见 [分析测试记录](docs/ANALYSIS_TESTS.md)，历史回归参见 [测试记录](docs/TEST_REPORT.md) 与 [公开发布及 CI](docs/PUBLIC_RELEASE.md)。
 
 发布到你自己的 GitHub 账号：
 
@@ -102,6 +123,8 @@ WORKLEDGER_GITHUB_OWNER=YOUR_GITHUB_ACCOUNT WORKLEDGER_GITHUB_REPO=workledger-ma
 脚本从当前 `gh` 登录识别账号，创建私有仓库，只发布源码白名单。已有同名仓库时停止，不覆盖远端。公开前应自行检查源码、演示数据和 Git 历史；本机日志、设置、token、报告和数据库不参与发布。
 
 ## 文档
+
+[0.2 升级与 OpenCode 验收](docs/ANALYSIS_UPGRADE.md) · [本轮分析测试](docs/ANALYSIS_TESTS.md)
 
 [本地 Codex 交接与验收](docs/LOCAL_CODEX_HANDOFF.md) · [架构与数据语义](docs/ARCHITECTURE.md) · [五类 Agent 适配细节](docs/ADAPTERS.md) · [浏览器适配](docs/BROWSER.md) · [来源资料](docs/SOURCES.md) · [测试记录](docs/TEST_REPORT.md)
 

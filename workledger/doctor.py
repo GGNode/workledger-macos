@@ -9,6 +9,12 @@ from .ingest import expand_paths
 
 
 def doctor(config: Config) -> dict:
+    from .analysis.backend import executable
+    cli = executable(config.data["llm"])
+    analysis = {"mode": config.data["llm"]["mode"], "opencode_executable": cli,
+                "opencode_dir": config.data["llm"].get("opencode_dir") or str(config.home/"analysis/workspace"),
+                "runtime_invocation_verified": False,
+                "note": "这里只检查路径，不调用模型、不读取登录文件。OpenCode 模型可能在远程运行。"}
     statuses = []
     commands = {"codex": "codex", "claude": "claude", "pi": "pi", "opencode": "opencode", "dsh": "dsh"}
     for source, opts in config.data["sources"].items():
@@ -19,5 +25,5 @@ def doctor(config: Config) -> dict:
         elif source == "activitywatch":
             status = "configured_not_probed" if opts.get("enabled") else "disabled"
         statuses.append({"source": source, "status": status, "files_found": len(paths), "examples": [str(p) for p in paths[:2]], "command": shutil.which(commands[source]) if source in commands else None})
-    return {"platform": platform.platform(), "python": sys.version.split()[0], "timezone": config.data["timezone"], "zstd_decoder": importlib.util.find_spec("zstandard") is not None,
+    return {"analysis": analysis, "platform": platform.platform(), "python": sys.version.split()[0], "timezone": config.data["timezone"], "zstd_decoder": importlib.util.find_spec("zstandard") is not None,
             "sources": statuses, "projects": len(config.data["projects"]), "running_on_macos": sys.platform == "darwin", "note": "found 仅代表发现文件。实际格式兼容性、缺失记录和错误请查看采集提示。物理键盘输入无法通过普通文件监听确定。"}

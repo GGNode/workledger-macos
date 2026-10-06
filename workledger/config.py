@@ -42,7 +42,11 @@ def defaults() -> dict:
             "bridge": {"enabled": True, "paths": []},
             "activitywatch": {"enabled": False, "url": "http://127.0.0.1:5600"},
         },
-        "llm": {"mode": "off", "url": "http://127.0.0.1:11434/api/chat", "model": "", "api_key_env": "WORKLEDGER_LLM_KEY", "allow_remote": False, "timeout": 90},
+        "llm": {"mode": "off", "url": "http://127.0.0.1:11434/api/chat", "model": "", "api_key_env": "WORKLEDGER_LLM_KEY", "allow_remote": False, "timeout": 120, "opencode_executable": "", "opencode_dir": "", "opencode_path": []},
+        "analysis": {"chunk_chars": 20000, "context_chars": 5000, "context_days": 7,
+                     "history_events_per_task": 12, "max_map_packets": 48, "max_calls": 96,
+                     "total_timeout": 900, "retries": 1, "cache_hours": 24,
+                     "failure_cooldown_seconds": 300, "max_output_bytes": 1048576},
         "schedule": {"enabled": False, "time": "18:30", "weekdays_only": True, "open": True},
         "capture_paused": False,
     }
@@ -76,8 +80,24 @@ def validate(c: dict) -> dict:
             path = Path(raw).expanduser().resolve()
             if path in {Path("/"), Path.home()}:
                 raise ValueError("Choose a project folder, not your whole home or disk")
-    if c["llm"]["mode"] not in {"off", "ollama", "openai-compatible"}:
+    if c["llm"]["mode"] not in {"off", "ollama", "openai-compatible", "opencode"}:
         raise ValueError("unsupported llm.mode")
+    llm = c["llm"]
+    if isinstance(llm["timeout"], bool) or not isinstance(llm["timeout"], (int, float)) or not 1 <= llm["timeout"] <= 1800:
+        raise ValueError("llm.timeout must be between 1 and 1800 seconds")
+    for field in ("model", "url", "opencode_executable", "opencode_dir"):
+        if not isinstance(llm[field], str) or "\0" in llm[field]:
+            raise ValueError("llm." + field + " must be a string without NUL")
+    if not isinstance(llm["opencode_path"], list) or not all(isinstance(p, str) and Path(p).expanduser().is_absolute() for p in llm["opencode_path"]):
+        raise ValueError("opencode_path must be a list of absolute executable-search directories")
+    bounds = {"chunk_chars": (3000, 100000), "context_chars": (0, 30000), "context_days": (0, 60),
+              "history_events_per_task": (0, 100), "max_map_packets": (1, 1000), "max_calls": (1, 3000),
+              "total_timeout": (1, 14400), "retries": (0, 2), "cache_hours": (1, 720),
+              "failure_cooldown_seconds": (1, 86400), "max_output_bytes": (1024, 8388608)}
+    for key, (low, high) in bounds.items():
+        v = c["analysis"].get(key)
+        if not isinstance(v, int) or isinstance(v, bool) or not low <= v <= high:
+            raise ValueError(f"analysis.{key} must be an integer between {low} and {high}")
     hour, minute = map(int, c["schedule"]["time"].split(":"))
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         raise ValueError("schedule time must be HH:MM")

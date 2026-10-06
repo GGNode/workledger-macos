@@ -109,7 +109,7 @@ def collect(config: Config, store: Store, *, force=False) -> dict:
         for path in paths + exports:
             key = f"file:{source}:{path}"
             try:
-                signature = file_signature(path)
+                signature = ["evidence-v2", *file_signature(path)]
                 if not force and store.cache_get(key) == signature:
                     continue
                 store.conn.execute("SAVEPOINT importing")

@@ -33,3 +33,9 @@ Optional `zstandard` is the only Python runtime extra. Keep local reports usable
 For user-authorized improvements, document concrete triggers, fix the problem, run meaningful affected checks, and promptly commit and push validated changes to the configured upstream. Keep a readable changelog for material behavior changes. Do not claim an Actions pass until the run for the pushed commit completes.
 
 Keep deployment-specific reports, machine inventories, raw logs, settings, credentials and private acceptance records outside this repository. Before public pushes, inspect staged files and commit identities for personal data; use a noreply author address. Do not broaden credentials merely to upload a workflow when a narrower existing authenticated path is available.
+
+## Daily analysis changes (0.2)
+
+Read `docs/ANALYSIS_UPGRADE.md` and `docs/ANALYSIS_TESTS.md` before changing the reporting chain. Production model inputs must come from the evidence planner, never legacy display cards. Keep all report surfaces on the same `analysis` result and publish formats as one generation. Never treat a user request as completion, an agent claim as an independent test, or a repeated tool failure as an unresolved final blocker without context. Model citations must resolve, but citation validation is not semantic entailment validation.
+
+The OpenCode backend must explicitly pass `--dir`, retain ordinary HOME/XDG/provider/plugin behavior, never copy auth files, and never hardcode a model. Keep the per-run no-tool/no-share policy and self-run registry. Keep expected-response replay strictly in tests; the illustrative report is not evidence of live LLM quality. Do not expose real work data in tests, examples, commit identities or CI artifacts.

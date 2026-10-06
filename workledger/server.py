@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
@@ -28,8 +29,20 @@ def valid_origin(origin: str | None, port: int) -> bool:
 
 def make_server(config: Config, *, port: int | None = None):
     home = config.home
+    jobs, jobs_lock = {}, threading.Lock()
+    def run_job(job_id, date, opening, refresh):
+        from .runtime import capture_and_report
+        try:
+            result = capture_and_report(Config(home), day=date, open_after=opening, refresh_analysis=refresh)
+            state = json.loads((result.parent / "state.json").read_text())
+            with jobs_lock:
+                jobs[job_id].update(status="done", path=str(result), analysis_status=state["analysis_status"])
+        except Exception as exc:
+            logging.exception("Report job failed; existing report generations retained")
+            with jobs_lock:
+                jobs[job_id].update(status="error", error="报告生成失败：" + type(exc).__name__)
     class Handler(BaseHTTPRequestHandler):
-        server_version = "WorkLedger/0.1"
+        server_version = "WorkLedger/0.2"
         def log_message(self, fmt, *args):
             # No payloads, Authorization headers, query strings or tokens in access logs.
             logging.debug("HTTP %s", self.command)
@@ -87,11 +100,29 @@ def make_server(config: Config, *, port: int | None = None):
             if not self.gate():
                 return
             cfg = Config(home)
+            if path == "/api/health":
+                # UI startup must not wait for database imports or path discovery.
+                self.send(200, {"ready": True})
+                return
             try:
                 with Store(cfg.db_path) as store:
                     if path == "/api/status":
                         from .doctor import doctor
                         self.send(200, {**store.summary(), "last_capture": store.cache_get("last_capture"), "config": cfg.data, "home": str(home), "doctor": doctor(cfg)})
+                    elif path == "/api/report-job":
+                        job_id = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
+                        with jobs_lock:
+                            job = dict(jobs.get(job_id, {}))
+                        if not job:
+                            self.send(404, {"error": "报告任务不存在，可能服务已重启；已有报告仍保留"})
+                        else:
+                            try:
+                                current = json.loads((home/"analysis/progress.json").read_text())
+                                if current.get("date") == job["date"]:
+                                    job["progress"] = current
+                            except (OSError, ValueError):
+                                pass
+                            self.send(200, job)
                     elif path == "/api/events":
                         day = parse_qs(urlsplit(self.path).query).get("date", [today(cfg.data["timezone"])])[0]
                         start, end = day_bounds(day, cfg.data["timezone"])
@@ -122,15 +153,30 @@ def make_server(config: Config, *, port: int | None = None):
                 cfg = Config(home)
                 path = urlsplit(self.path).path
                 if path == "/api/config":
-                    allowed = {"timezone", "report_open", "poll_seconds", "projects", "sources", "llm", "schedule", "capture_paused", "exclude", "max_file_mb", "max_source_mb", "max_project_files"}
+                    allowed = {"timezone", "report_open", "poll_seconds", "projects", "sources", "llm", "schedule", "capture_paused", "exclude", "max_file_mb", "max_source_mb", "max_project_files", "analysis"}
                     if not set(data) <= allowed:
                         raise ValueError("Unsupported setting; edit the local config file for port changes, then restart")
                     cfg.save(data)
                     self.send(200, {"saved": True})
                 elif path == "/api/report":
-                    from .runtime import capture_and_report
-                    result = capture_and_report(cfg, day=data.get("date"), open_after=data.get("open", True))
-                    self.send(200, {"path": str(result), "date": result.parent.name})
+                    date = data.get("date") or today(cfg.data["timezone"])
+                    day_bounds(date, cfg.data["timezone"])
+                    with jobs_lock:
+                        existing = next((j for j in jobs.values() if j["status"] == "running" and j["date"] == date), None)
+                        if existing:
+                            job = dict(existing)
+                        else:
+                            # Bound in-memory completed job history, not report data.
+                            for old in list(jobs):
+                                if len(jobs) < 50:
+                                    break
+                                if jobs[old]["status"] != "running":
+                                    del jobs[old]
+                            job_id = uuid.uuid4().hex
+                            job = {"id": job_id, "date": date, "status": "running"}
+                            jobs[job_id] = dict(job)
+                            threading.Thread(target=run_job, args=(job_id, date, bool(data.get("open", True)), bool(data.get("refresh_analysis", False))), daemon=True).start()
+                    self.send(202, job)
                 elif path == "/api/open":
                     from .macos import open_output
                     date = data["date"]

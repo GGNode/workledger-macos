@@ -20,7 +20,8 @@
    if(!id&&source==='chatgpt')id=el.getAttribute('data-chatgpt-search-message-ids')?.trim().split(/\s+/)[0]||el.querySelector('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id');
    if(!id){if(!stable.has(el))stable.set(el,'dom-'+crypto.randomUUID());id=stable.get(el);}
    const body=source==='chatgpt'?(el.querySelector('[data-user-message-bubble],[data-markdown-text-style="assistant-message"]')||el):el;
-   return {id,role,text:(body.innerText||'').slice(0,24000)};
+   const text=body.innerText||'';
+   return {id,role,text:text.slice(0,24000),content_truncated:text.length>24000,original_text_chars:text.length};
   });
  }
  function promptText(){
@@ -53,7 +54,7 @@
     schema:'workledger.event.v1',source,id:scope+'/'+r.id,kind:r.role==='user'?'user_message':'agent_message',
     session_id:scope,session_title:document.title,actor:r.role==='assistant'?'agent':'unknown',
     occurred_at:r.occurred_at,chronology:r.chronology,text:r.text,evidence:'trusted_submit_then_new_dom',
-    metadata:{role:r.role,url:location.origin+location.pathname,creation_time:'live observation, not a server timestamp',physical_typing_verified:false}
+    metadata:{role:r.role,url:location.origin+location.pathname,creation_time:'live observation, not a server timestamp',physical_typing_verified:false,content_truncated:!!r.content_truncated,original_text_chars:r.original_text_chars}
   }))}).catch(()=>{});
  }
  new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(scan,900);}).observe(document.documentElement,{childList:true,subtree:true,characterData:true});

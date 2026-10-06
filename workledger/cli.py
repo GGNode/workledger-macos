@@ -27,9 +27,19 @@ def main(argv=None):
     c = subs.add_parser("collect", help="手动采集一次")
     c.add_argument("--force", action="store_true", help="重新解析未变化日志（稳定ID去重）")
     r = subs.add_parser("report", help="采集并生成报告")
+    r.add_argument("--refresh-analysis", action="store_true", help="跳过已有模型缓存，明确重新分析")
+    r.add_argument("--json", action="store_true", help="输出报告路径、分析状态及生成版本")
     r.add_argument("--date", help="YYYY-MM-DD，按已配置的本机时区")
     r.add_argument("--no-open", action="store_true")
     r.add_argument("--open", action="store_true")
+    analysis = subs.add_parser("analysis", help="查看或选择日报分析后端，不修改 OpenCode 登录或配置")
+    analysis.add_argument("action", choices=["status", "configure"])
+    analysis.add_argument("--backend", choices=["off", "opencode", "ollama", "openai-compatible"])
+    analysis.add_argument("--dir", dest="opencode_dir", help="明确的 OpenCode 工作目录")
+    analysis.add_argument("--executable", help="本机 OpenCode 可执行文件的绝对路径")
+    analysis.add_argument("--model", help="可选；OpenCode 留空沿用正常配置的模型")
+    analysis.add_argument("--url", help="Ollama/OpenAI 兼容完整接口地址")
+    analysis.add_argument("--allow-remote", action="store_true", help="明确允许远程 HTTP 后端；OpenCode 遵循正常提供商配置")
     subs.add_parser("ui", help="打开本机控制面板；未运行时以前台方式启动服务")
     subs.add_parser("daemon", help="持续采集、定时报告及本机控制面板")
     subs.add_parser("pair", help="显示浏览器扩展配对信息；不要分享配对码")
@@ -83,7 +93,32 @@ def main(argv=None):
         elif args.cmd == "report":
             from .runtime import capture_and_report
             opening = False if args.no_open else True if args.open else None
-            print(capture_and_report(cfg, day=args.date, open_after=opening))
+            path = capture_and_report(cfg, day=args.date, open_after=opening, refresh_analysis=args.refresh_analysis)
+            state = json.loads((path.parent/"state.json").read_text())
+            print(json.dumps({"path": str(path), **state}, ensure_ascii=False, indent=2) if args.json else path)
+        elif args.cmd == "analysis":
+            if args.action == "configure":
+                if not args.backend:
+                    raise ValueError("选择 --backend；配置本身不会调用模型")
+                values = {"mode": args.backend}
+                if args.backend == "opencode":
+                    from .analysis.backend import executable
+                    if not args.opencode_dir or not Path(args.opencode_dir).expanduser().is_dir():
+                        raise ValueError("OpenCode 配置需要 --dir 指向存在的工作目录")
+                    values["opencode_dir"] = str(Path(args.opencode_dir).expanduser().resolve())
+                    candidate = args.executable or executable(cfg.data["llm"])
+                    if candidate:
+                        values["opencode_executable"] = candidate
+                    values["model"] = args.model or ""
+                elif args.model is not None:
+                    values["model"] = args.model
+                if args.url:
+                    values["url"] = args.url
+                if args.allow_remote:
+                    values["allow_remote"] = True
+                cfg.save({"llm": values})
+            from .doctor import doctor
+            print(json.dumps(doctor(cfg)["analysis"], ensure_ascii=False, indent=2))
         elif args.cmd == "import":
             from .adapters.bridge import ingest_bridge, import_chatgpt_export
             from .adapters.opencode import parse_opencode_export
@@ -126,7 +161,7 @@ def main(argv=None):
             if args.cmd == "ui":
                 import urllib.request
                 try:
-                    req = urllib.request.Request(url.split("#")[0] + "api/status", headers={"Authorization": "Bearer " + cfg.token})
+                    req = urllib.request.Request(url.split("#")[0] + "api/health", headers={"Authorization": "Bearer " + cfg.token})
                     with urllib.request.urlopen(req, timeout=2) as response:
                         if response.status == 200:
                             webbrowser.open(url)

@@ -32,10 +32,17 @@ with tempfile.TemporaryDirectory() as temp:
   page.wait_for_selector('#workspace:not([hidden])')
   page.locator('#add-project').click();page.locator('.project-name').fill('模型研究');page.locator('.project-paths').fill('/demo/research');page.locator('#save-projects').click();page.wait_for_timeout(100)
   assert page.evaluate('fixtureStatus.config.projects[0].name')=='模型研究'
+  page.locator('#llm-mode').select_option('opencode')
+  page.locator('#opencode-dir').fill('/synthetic/normal-project')
+  page.locator('#opencode-executable').fill('/synthetic/bin/opencode')
+  page.locator('#save-llm').click();page.wait_for_timeout(100)
+  assert page.evaluate('fixtureStatus.config.llm.mode')=='opencode'
+  assert page.evaluate('fixtureStatus.config.llm.opencode_dir')=='/synthetic/normal-project'
+  assert '远程' in page.locator('#opencode-options').inner_text()
   page.screenshot(path=str(artifacts/'control-panel.png'),full_page=True)
   demo=create_demo(Path(temp)/'demo')
   page.set_content(demo.read_text());page.wait_for_timeout(100)
-  assert page.locator('h1').inner_text()=='2026-10-06 工作简报'
+  assert page.locator('h1').inner_text()=='今天，工作推进到了哪里'
   assert '演示数据' in page.inner_text('body')
   page.screenshot(path=str(artifacts/'demo-desktop.png'),full_page=True)
   page.set_viewport_size({'width':390,'height':844});page.screenshot(path=str(artifacts/'demo-mobile.png'),full_page=True)
@@ -45,4 +52,4 @@ with tempfile.TemporaryDirectory() as temp:
   page.locator('a[href^="#e-"]').first.click();assert page.locator('#evidence').evaluate('(e)=>e.open')
   assert not errors,errors
   browser.close()
- print(json.dumps({'status':'passed','scope':'offline HTML + real app.js with explicitly mocked fetch, not a live site or live extension','checks':['dashboard render','project form save payload','desktop report','mobile 390px no overflow','evidence reference expands detail','no JavaScript exceptions'],'screenshots':str(artifacts)},ensure_ascii=False,indent=2))
+ print(json.dumps({'status':'passed','scope':'offline HTML + real app.js with explicitly mocked fetch, not a live site or live extension','checks':['dashboard render','project form save payload','OpenCode analysis settings save/data-flow disclosure','desktop report','mobile 390px no overflow','evidence reference expands detail','no JavaScript exceptions'],'screenshots':str(artifacts)},ensure_ascii=False,indent=2))

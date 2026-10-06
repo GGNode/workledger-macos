@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 from ..store import Store
-from ..util import content_text, digest, nested, stamp
+from ..util import content_text, digest, nested, stamp, sanitize, redact
 
 
 def as_dict(value: Any) -> dict:
@@ -82,8 +82,15 @@ class Writer:
     def call(self, cid, name, arguments, at):
         cid = str(cid)
         self.calls[cid] = {"name": str(name), "arguments": as_dict(arguments), "at": at}
-        # Do not persist complete shell arguments/tool inputs by default (may hold credentials).
-        self.event(cid, "tool_call", at, actor="agent", text=str(name), metadata={"call_id": cid, "tool": str(name)})
+        args = sanitize(as_dict(arguments))
+        encoded = json.dumps(args, ensure_ascii=False, sort_keys=True)
+        operation = digest([self.cwd, str(name), args])
+        self.calls[cid]["operation_id"] = operation
+        # Captured input is inert, bounded, and redacted; never execute it.
+        self.event(cid, "tool_call", at, actor="agent", text=str(name), metadata={
+            "call_id": cid, "tool": str(name), "operation_id": operation,
+            "arguments_excerpt": encoded[:16000], "arguments_chars": len(encoded),
+            "arguments_truncated": len(encoded) > 16000})
 
     def result(self, cid, value, at, *, explicit_ok=None, name=None):
         cid = str(cid)
@@ -91,7 +98,17 @@ class Writer:
         ok = successful(value) if explicit_ok is None else bool(explicit_ok)
         tool = name or call.get("name", "tool")
         output = content_text(value.get("content", value.get("output", ""))) if isinstance(value, dict) else content_text(value)
-        self.event(cid, "tool_result", at, actor="agent", text=f"{tool}: {'completed' if ok else 'failed'}", metadata={"call_id": cid, "tool": tool, "success": ok, "output_excerpt": output[:2000]})
+        if not output and isinstance(value, dict):
+            output = str(value.get("error") or "")
+        output = redact(output)
+        args = sanitize(call.get("arguments", {}))
+        operation = call.get("operation_id")  # Missing call/input cannot establish retry equivalence.
+        self.event(cid, "tool_result", at, actor="agent", text=f"{tool}: {'completed' if ok else 'failed'}", metadata={
+            "call_id": cid, "tool": tool, "success": ok, "operation_id": operation,
+            "output_excerpt": output[:2000], "output": output[:131072],
+            "output_chars": len(output), "output_truncated": len(output) > 131072,
+            "operation_excerpt": json.dumps(args, ensure_ascii=False, sort_keys=True)[:4000],
+            "started_at": stamp(call.get("at")), "settled_at": stamp(at)})
         if ok:
             for path in artifact_paths(tool, call.get("arguments", {}), self.cwd):
                 self.event(cid + "/" + path, "file_edit", at, actor="agent", artifact=path, text=f"{tool} 已返回成功", evidence="successful_tool_result", metadata={"call_id": cid, "tool": tool, "verification": "tool-reported; final disk content not independently verified"})

@@ -56,6 +56,15 @@ class TimeTests(Base):
         self.store.event('test','a','note',occurred_at='2026-10-05T17:00:00Z');self.assertEqual(len(self.store.events(*day_bounds('2026-10-06','Asia/Hong_Kong'))),1);self.assertEqual(self.events(),[])
 
 class StoreTests(Base):
+    def test_existing_reader_opens_during_uncommitted_import(self):
+        self.store.conn.execute('BEGIN IMMEDIATE')
+        self.store.cache_set('in-progress', True)
+        try:
+            with Store(self.cfg.db_path) as reader:
+                self.assertIsNone(reader.cache_get('in-progress'))
+                self.assertEqual(reader.summary()['events'], 0)
+        finally:
+            self.store.conn.rollback()
     def test_dedup_revisions(self):
         eid=self.store.event('x','1','note',occurred_at=AT,text='first')
         self.store.event('x','1','note',occurred_at=AT,text='first')
@@ -298,6 +307,16 @@ class SchedulingTests(Base):
         with self.assertRaises(ValueError):open_output(self.cfg,Path('/etc/passwd'))
 
 class SecurityTests(Base):
+    def test_health_does_not_open_database_or_run_discovery(self):
+        server=make_server(self.cfg,port=0)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            request=urllib.request.Request(f'http://127.0.0.1:{server.server_port}/api/health',headers={'Authorization':'Bearer '+self.cfg.token})
+            with patch('workledger.server.Store',side_effect=AssertionError('health must not open the database')):
+                with urllib.request.urlopen(request,timeout=2) as response:
+                    self.assertEqual(json.load(response),{'ready':True})
+        finally:
+            server.shutdown();server.server_close();thread.join()
     def setUp(self):
         super().setUp();self.server=make_server(self.cfg,port=0);self.port=self.server.server_port;self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
     def tearDown(self):self.server.shutdown();self.server.server_close();self.thread.join();super().tearDown()

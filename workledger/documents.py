@@ -100,6 +100,8 @@ def changes(before: dict, after: dict) -> list[dict]:
             continue
         diff = list(difflib.unified_diff(a.splitlines(), b.splitlines(), fromfile="before", tofile="after", lineterm=""))
         result.append({"section": k, "before": a[:2000], "after": b[:2000], "diff": "\n".join(diff[:120]),
+                       "content_truncated": len(a)>2000 or len(b)>2000 or len(diff)>120,
+                       "before_chars": len(a), "after_chars": len(b), "diff_lines": len(diff),
                        "added_lines": sum(x.startswith("+") and not x.startswith("+++") for x in diff),
                        "removed_lines": sum(x.startswith("-") and not x.startswith("---") for x in diff)})
     return result
@@ -156,7 +158,7 @@ def collect_documents(config: Config, store: Store):
                                       actor="unknown", occurred_at=captured, chronology="live_observed", artifact=str(path),
                                       text=f"{path.name}：" + "、".join(d["section"] for d in delta[:6]), evidence="snapshot_diff",
                                       metadata={"project": project["name"], "before_hash": prev["hash"] if prev else None, "after_hash": h,
-                                                "interval_start": prev["captured_at"] if prev else store.cache_get("root-baseline:" + str(root)), "observed_not_edit_time": True, "newly_observed": not bool(prev), "changes": delta[:30],
+                                                "interval_start": prev["captured_at"] if prev else store.cache_get("root-baseline:" + str(root)), "observed_not_edit_time": True, "newly_observed": not bool(prev), "changes": delta[:30], "changes_truncated": len(delta)>30 or any(d.get("content_truncated") for d in delta),
                                                 "sections_changed": len(delta), "requires_author_confirmation": True})
                         # First observation is a baseline, never today's newly created output.
                         store.conn.execute("INSERT INTO snapshots VALUES(?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET hash=excluded.hash,structure=excluded.structure,captured_at=excluded.captured_at,stat_signature=excluded.stat_signature",
@@ -175,7 +177,7 @@ def collect_documents(config: Config, store: Store):
                         delta = changes(json.loads(previous["structure"]), {})
                         store.event("documents", digest([str(oldpath), previous["hash"], "deleted", previous["captured_at"]]), "document_change", actor="unknown", occurred_at=when,
                                     chronology="live_observed", artifact=str(oldpath), text=oldpath.name + "：观察到删除或移走", evidence="snapshot_missing",
-                                    metadata={"project":project["name"], "deleted_or_moved":True, "observed_not_edit_time":True, "interval_start":previous["captured_at"], "changes":delta[:30]})
+                                    metadata={"project":project["name"], "deleted_or_moved":True, "observed_not_edit_time":True, "interval_start":previous["captured_at"], "changes":delta[:30], "changes_truncated": len(delta)>30 or any(d.get("content_truncated") for d in delta)})
                         store.conn.execute("DELETE FROM snapshots WHERE path=?",(str(oldpath),))
                 store.cache_set("root-baseline:" + str(root), now())
     store.resolve_issue("project-file-limit")

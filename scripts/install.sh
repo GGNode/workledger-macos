@@ -4,7 +4,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_DIR="${WORKLEDGER_HOME:-$HOME/Library/Application Support/WorkLedger}"
 PY="${WORKLEDGER_PYTHON:-}"
 if [ -z "$PY" ]; then
-  for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+  # Keep an existing WorkLedger runtime, including its optional decoder, on upgrades.
+  for candidate in "$HOME/.local/share/workledger-py/bin/python" /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
     if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys;sys.exit(sys.version_info<(3,11))' 2>/dev/null; then PY="$(command -v "$candidate")"; break; fi
   done
 fi

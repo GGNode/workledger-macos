@@ -48,15 +48,18 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.conn = sqlite3.connect(str(path), timeout=30)
         self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA busy_timeout=30000")
+        if self.conn.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+            self.conn.execute("PRAGMA journal_mode=WAL")
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
         if version > 1:
             self.conn.close()
             raise ValueError(f"Database version {version} is newer than this WorkLedger")
-        self.conn.executescript(SCHEMA)
-        self.conn.execute("PRAGMA user_version=1")
-        self.conn.commit()
+        # Existing readers must not acquire a write lock during a long import.
+        if version == 0:
+            self.conn.executescript(SCHEMA)
+            self.conn.execute("PRAGMA user_version=1")
+            self.conn.commit()
         os.chmod(path, 0o600)
 
     def close(self):
@@ -122,12 +125,16 @@ class Store:
             raise ValueError("invalid chronology")
         family = "message" if kind in {"user_message", "agent_message", "delegated_instruction"} else kind
         eid = digest([source, str(native_id), family])[:32]
+        clean_text = redact(str(text))
+        meta = dict(metadata or {})
+        if len(clean_text) > 131072:
+            meta.update(text_truncated=True, original_text_chars=len(clean_text), retained_text_chars=131072)
         data = {
             "id": eid, "source": source, "native_id": str(native_id), "session_id": session_id,
             "kind": kind, "actor": actor, "occurred_at": at, "observed_at": seen,
             "ended_at": stamp(ended_at), "chronology": chronology,
-            "text": redact(str(text))[:24000], "artifact": str(artifact), "evidence": evidence,
-            "metadata": json_text(sanitize(metadata or {})),
+            "text": clean_text[:131072], "artifact": str(artifact), "evidence": evidence,
+            "metadata": json_text(sanitize(meta)),
         }
         # Observation is not content; repeated imports don't manufacture edits.
         fingerprint = digest({k: v for k, v in data.items() if k not in {"observed_at"}})
