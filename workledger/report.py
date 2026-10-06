@@ -62,7 +62,7 @@ def brief(event: dict) -> str:
 def build_report(config: Config, store: Store, day: str | None = None) -> dict:
     day = day or today(config.data["timezone"])
     start, end = day_bounds(day, config.data["timezone"])
-    events = store.events(start, end)
+    events = [e for e in store.events(start, end) if not e["metadata"].get("exclude_from_brief")]
     sessions = store.all_sessions()
     for e in events:
         if e["kind"] in {"user_message", "delegated_instruction"} and e["actor"] != "human":

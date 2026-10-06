@@ -6,6 +6,7 @@ from pathlib import Path
 from ..store import Store
 from ..util import content_text, digest, nested, stamp
 from .common import Writer, as_dict, blocks, successful
+from .codex_text import request_text
 
 
 def parse_codex(rows: list[dict], path: Path, store: Store):
@@ -32,7 +33,15 @@ def parse_codex(rows: list[dict], path: Path, store: Store):
             if t == "message":
                 text = content_text(p.get("content", []))
                 injected = text.lstrip().startswith(("<environment_context>", "# AGENTS.md instructions", "<permissions instructions>", "<subagent_notification>"))
-                w.message(key, p.get("role"), p.get("content"), at, injected=injected, metadata={"phase": p.get("phase", "")})
+                if p.get("role") == "user":
+                    cleaned = request_text(text)
+                    if injected or not cleaned:
+                        # Retain the envelope as excluded evidence, and reclassify old imports.
+                        w.event(key, "user_message", at, actor="system", text=text, evidence="injected_context", metadata={"exclude_from_brief": True})
+                    else:
+                        w.message(key, "user", cleaned, at)
+                else:
+                    w.message(key, p.get("role"), p.get("content"), at, injected=injected, metadata={"phase": p.get("phase", ""), "channel": p.get("channel", "")})
             elif t in {"function_call", "custom_tool_call"}:
                 w.call(p.get("call_id", key), p.get("name", "tool"), p.get("arguments", {"input": p.get("input", "")}), at)
             elif t in {"function_call_output", "custom_tool_call_output"}:
@@ -49,7 +58,10 @@ def parse_codex(rows: list[dict], path: Path, store: Store):
             if t in {"user_message", "agent_message"}:
                 role = "user" if t == "user_message" else "assistant"
                 if role not in response_roles:
-                    w.message(key, role, p.get("message", ""), at)
+                    text = p.get("message", "")
+                    if role == "user":
+                        text = request_text(text)
+                    w.message(key, role, text, at)
             elif t in {"task_started", "turn_started"}:
                 current_turn = str(p.get("turn_id", key))
                 w.start(current_turn, p.get("started_at") or at)

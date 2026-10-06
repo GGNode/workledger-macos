@@ -6,15 +6,21 @@
  const stable=new WeakMap();let n=0;
  function rows(){
   let elements=[];
-  if(source==='chatgpt')elements=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"]')];
+  if(source==='chatgpt'){
+   elements=[...document.querySelectorAll('[data-message-author-role="user"],[data-message-author-role="assistant"],[data-chatgpt-search-unit-key$=":user"],[data-chatgpt-search-unit-key$=":assistant"]')];
+   // Current ChatGPT uses search-unit containers; select the outer message once.
+   elements=elements.filter((el,i,all)=>!all.some((other,j)=>i!==j&&other.contains(el)));
+  }
   else if(source==='claude-web')elements=[...document.querySelectorAll('[data-testid="user-message"], [data-is-streaming], .font-claude-response')].filter((el,i,all)=>!all.some((other,j)=>i!==j&&other.contains(el)));
   else elements=[...document.querySelectorAll('user-query,model-response')];
   return elements.map(el=>{
    let role=el.getAttribute('data-message-author-role');
-   if(!role)role=(el.matches('[data-testid="user-message"],user-query'))?'user':'assistant';
+   if(!role)role=(el.matches('[data-testid="user-message"],user-query,[data-chatgpt-search-unit-key$=":user"]'))?'user':'assistant';
    let id=el.getAttribute('data-message-id')||el.closest('[data-message-id]')?.getAttribute('data-message-id');
+   if(!id&&source==='chatgpt')id=el.getAttribute('data-chatgpt-search-message-ids')?.trim().split(/\s+/)[0]||el.querySelector('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id');
    if(!id){if(!stable.has(el))stable.set(el,'dom-'+crypto.randomUUID());id=stable.get(el);}
-   return {id,role,text:(el.innerText||'').slice(0,24000)};
+   const body=source==='chatgpt'?(el.querySelector('[data-user-message-bubble],[data-markdown-text-style="assistant-message"]')||el):el;
+   return {id,role,text:(body.innerText||'').slice(0,24000)};
   });
  }
  function promptText(){
@@ -47,7 +53,7 @@
     schema:'workledger.event.v1',source,id:scope+'/'+r.id,kind:r.role==='user'?'user_message':'agent_message',
     session_id:scope,session_title:document.title,actor:r.role==='assistant'?'agent':'unknown',
     occurred_at:r.occurred_at,chronology:r.chronology,text:r.text,evidence:'trusted_submit_then_new_dom',
-    metadata:{role:r.role,url:location.origin+scope,creation_time:'live observation, not a server timestamp',physical_typing_verified:false}
+    metadata:{role:r.role,url:location.origin+location.pathname,creation_time:'live observation, not a server timestamp',physical_typing_verified:false}
   }))}).catch(()=>{});
  }
  new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(scan,900);}).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
