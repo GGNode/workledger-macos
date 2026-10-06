@@ -126,11 +126,11 @@ def item_ids(value):
     return list(dict.fromkeys(eid for c in item_claims(value) for eid in c["evidence_ids"]))
 
 
-def validate_map(obj, evidence, task_ids, required_ids):
+def validate_map(obj, evidence, task_ids, required_ids, *, allow_partial=False):
     if not isinstance(obj, dict):
         raise ValueError("map response must be an object")
     accounted = ids(obj.get("accounted_ids"), evidence, "accounted_ids")
-    if not set(required_ids) <= set(accounted):
+    if not allow_partial and not set(required_ids) <= set(accounted):
         raise ValueError("map response silently omitted evidence")
     items = [item(v, evidence, task_ids) for v in array(obj.get("items"), "items", 20)]
     ignored = []
@@ -139,9 +139,14 @@ def validate_map(obj, evidence, task_ids, required_ids):
             raise ValueError("missing noise exclusion reason")
         ignored.append({"evidence_ids": ids(row.get("evidence_ids"), evidence), "reason": row["reason"]})
     cited = {eid for v in items for eid in item_ids(v)} | {eid for row in ignored for eid in row["evidence_ids"]}
-    if not set(required_ids) <= cited:
+    if not allow_partial and not set(required_ids) <= cited:
         raise ValueError("accounted IDs must also be cited or explicitly classified as noise/context")
-    return {"items": items, "accounted_ids": accounted, "ignored": ignored}
+    result = {"items": items, "accounted_ids": accounted, "ignored": ignored}
+    if allow_partial:
+        # A coverage failure does not invalidate otherwise validated claims.
+        # Only declared AND actually cited/classified records can count as done.
+        result["unaccounted_ids"] = sorted(set(required_ids) - (set(accounted) & cited))
+    return result
 
 
 def validate_routes(obj, available):

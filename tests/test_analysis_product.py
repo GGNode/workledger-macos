@@ -95,6 +95,28 @@ class ProductTests(unittest.TestCase):
                 except ValueError as exc:raise AnalysisError('schema') from exc
         warnings=[];out=consolidate([theme],{'evidence':evidence,'tasks':tasks},DropsBlocker(),theme['title'],60000,warnings)
         self.assertEqual(out[0]['issues'][0]['state'],'open');self.assertEqual(warnings[0]['code'],'schema')
+    def test_partial_map_publishes_analysis_and_preserves_missing_evidence(self):
+        self.cfg.save({'llm':{'mode':'opencode'}})
+        kept=self.store.event('test','kept','note',occurred_at=AT,text='Synthetic confirmed work',actor='human',session_id='kept-task')
+        omitted=self.store.event('test','omitted','user_message',occurred_at=AT,text='Independent requirement',session_id='omitted-task')
+        self.store.conn.commit()
+        class PartialResponse:
+            calls=0;actual_models=set()
+            def request(self,stage,data,instruction,validator):
+                self.calls+=1
+                if stage=='map':
+                    r=next(v for v in data['records'] if v['id']==kept)
+                    self.work={'title':'Confirmed work','task_ids':[r['task_id']],'work':[{'text':'Confirmed work','evidence_ids':[kept],'basis':'human_confirmed','scope':'today'}],'results':[],'remaining':[],'suggestions':[],'issues':[]}
+                    value={'items':[self.work],'accounted_ids':[kept,omitted],'ignored':[]}
+                elif stage=='route':value={'groups':[{'title':'Confirmed work','item_ids':[v['id'] for v in data['catalog']]}]}
+                elif stage=='theme':value={**self.work,'covered_item_ids':[v['id'] for v in data['items']]}
+                elif stage=='day':value={'highlights':self.work['work']}
+                return validator(value)
+        r=build_report(self.cfg,self.store,DAY,analysis_client=PartialResponse());a=r['analysis']
+        self.assertEqual(a['status'],'partial');self.assertEqual(a['coverage']['evidence_analyzed'],1)
+        self.assertEqual(a['coverage']['missing_evidence_ids'],[omitted]);self.assertEqual(a['coverage']['packets_partial'],1)
+        self.assertEqual(a['coverage']['packets_analyzed'],0);self.assertTrue(a['highlights'])
+        self.assertTrue(any(t.get('analysis_status')=='observation_only' for t in a['themes']))
     def test_mapping_reserves_budget_for_daily_conclusions(self):
         self.cfg.save({'llm':{'mode':'opencode'},'analysis':{'chunk_chars':3000}})
         for i in range(2):

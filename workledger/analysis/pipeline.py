@@ -206,7 +206,7 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
               "status": "disabled" if mode == "off" else "complete", "generated_at": now(),
               "highlights": [], "themes": [], "warnings": [], "coverage": {
                   "today_evidence": len(plan["today_ids"]), "tasks_total": len(plan["tasks"]),
-                  "packets_total": len(plan["packets"]), "packets_analyzed": 0,
+                  "packets_total": len(plan["packets"]), "packets_analyzed": 0, "packets_partial": 0,
                   "evidence_analyzed": 0, "tasks_analyzed": 0, "missing_evidence_ids": [],
                   "excluded": plan["excluded"], "source_truncated_ids": plan["truncated_evidence_ids"],
                   "history_omitted": plan["history_omitted"], "history_window_start": plan["history_window_start"],
@@ -245,10 +245,16 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
         required = {r["id"] for r in records}
         try:
             value = client.request("map", data, MAP_PROMPT,
-                                   lambda x: validate_map(x, relevant, {r["task_id"] for r in records}, required))
-            output["coverage"]["packets_analyzed"] += 1
+                                   lambda x: validate_map(x, relevant, {r["task_id"] for r in records}, required, allow_partial=True))
+            unaccounted = set(value.get("unaccounted_ids", []))
+            if unaccounted:
+                output["coverage"]["packets_partial"] += 1
+                warnings.append({"stage": "map", "packet": n, "code": "incomplete", "detail": "该包部分记录未被引用或归类，已计入未分析范围；只保留通过引用、归属及结构校验的分析"})
+            else:
+                output["coverage"]["packets_analyzed"] += 1
             for r in records:
-                complete_parts[r["id"]].add(r["part"])
+                if r["id"] not in unaccounted:
+                    complete_parts[r["id"]].add(r["part"])
             output["coverage"]["model_ignored"].extend(value["ignored"])
             for v in value["items"]:
                 v["id"] = "item-" + digest([n, v])[:16]

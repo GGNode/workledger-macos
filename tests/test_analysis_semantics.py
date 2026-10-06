@@ -235,6 +235,16 @@ class EvidencePlanningTests(Base):
         p=self.plan()
         self.assertTrue(all(len({r['task_id'] for r in b})<=16 for b in p['packets']))
         self.assertEqual(len({r['task_id'] for b in p['packets'] for r in b}),120)
+    def test_partial_map_retains_valid_claims_without_counting_omitted_records(self):
+        kept=self.store.event('x','kept','note',occurred_at=AT,text='Confirmed synthetic work',actor='human')
+        omitted=self.store.event('x','omitted','user_message',occurred_at=AT,text='Independent synthetic requirement')
+        p=self.plan();row=p['evidence'][kept]
+        value={'items':[{'title':'Synthetic confirmed work','task_ids':[row['task_id']],'work':[{'text':'Confirmed work','evidence_ids':[kept],'basis':'human_confirmed','scope':'today'}],'results':[],'remaining':[],'suggestions':[],'issues':[]}],'accounted_ids':[kept,omitted],'ignored':[]}
+        with self.assertRaises(ValueError):schema.validate_map(value,p['evidence'],p['tasks'],{kept,omitted})
+        out=schema.validate_map(value,p['evidence'],p['tasks'],{kept,omitted},allow_partial=True)
+        self.assertEqual(out['unaccounted_ids'],[omitted]);self.assertEqual(out['items'][0]['work'][0]['evidence_ids'],[kept])
+        bad=copy.deepcopy(value);bad['items'][0]['work'][0]['evidence_ids']=['unknown']
+        with self.assertRaises(ValueError):schema.validate_map(bad,p['evidence'],p['tasks'],{kept,omitted},allow_partial=True)
     def test_early_packet_includes_later_delivery_without_changing_time_or_actor(self):
         request=self.store.event('x','request','user_message',occurred_at=AT,text='Write the synthetic review',session_id='task')
         delivery=self.store.event('x','delivery','agent_message',occurred_at=LATER,text='Synthetic review delivered; no independent runtime test',session_id='task',actor='agent')

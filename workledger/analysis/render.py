@@ -65,9 +65,11 @@ def evidence_html(r, a):
     out += '<details><summary>分析覆盖、归属统计与采集状态</summary><div class="coverage-grid">'
     for label, value in (("完整分析的证据", f'{c["evidence_analyzed"]} / {c["today_evidence"]}'),
                          ("完整覆盖的原生任务", f'{c["tasks_analyzed"]} / {c["tasks_total"]}'),
-                         ("已处理分块", f'{c["packets_analyzed"]} / {c["packets_total"]}')):
+                         ("完整处理分块", f'{c["packets_analyzed"]} / {c["packets_total"]}')):
         out += f'<div><strong>{esc(value)}</strong>{esc(label)}</div>'
     out += '</div>'
+    if c.get('packets_partial'):
+        out += f'<p class="audit">另有 {c["packets_partial"]} 个分块仅完成部分分析；遗漏记录未计入完整覆盖。</p>'
     out += f'<p class="audit">后端调用尝试 {a["transport"]["calls"]} 次，缓存命中 {a["transport"]["cache_hits"]} 次。读取报告不会重新请求模型。</p>'
     out += f'<p class="audit">历史上下文起点 {esc(c["history_window_start"])}；历史条数上限省略 {c["history_omitted"]} 条。上下文摘录不完整的包 {c["context_truncated_packets"]} 个，未纳入全部上下文的包 {c["context_omitted_packets"]} 个。源记录已截断或旧版只保留片段的证据 {len(c["source_truncated_ids"])} 条。</p>'
     if c["excluded"]:
