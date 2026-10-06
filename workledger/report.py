@@ -43,17 +43,27 @@ def project_for(event: dict, sessions: dict, config: Config) -> str:
 
 
 def short_result(text: str) -> str:
-    """Extract a result sentence, not a stream preamble. Keep original wording."""
+    """Extract final result sentences, not stream preamble. Keep original wording."""
     import re
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
-    candidates = [re.sub(r"^[#*\-\d. )]+", "", line).strip() for line in text.splitlines() if line.strip()]
-    substantive = [line for line in candidates if re.search(r"完成|修复|通过|失败|结论|发现|结果|尚未|未验证|completed|passed|failed|fixed|found",line,re.I)]
-    return clip("；".join((substantive or candidates)[:2]),160)
+    had_code = "```" in (text or "")
+    text = re.sub(r"```.*?```", "", text or "", flags=re.S)
+    # Strip list/heading markers only; a leading date (2026-10-06 ...) is content.
+    candidates = [re.sub(r"^(\s*(#{1,6}\s+|[-*]\s+|\d+[.)]\s+))+", "", line).strip() for line in text.splitlines() if line.strip()]
+    substantive = [line for line in candidates if re.search(r"完成|修复|通过|失败|结论|发现|结果|尚未|未验证|总结|成功|已更新|completed|passed|failed|fixed|found|done|updated|success|summar|verif|implement|added",line,re.I)]
+    # Prefer trailing substantive lines: the final result, not the preamble.
+    picked = (substantive or candidates)[-2:]
+    out = "；".join(picked)
+    if had_code and not substantive and out:
+        out += "（含代码块，见证据）"
+    return clip(out, 160)
 
 
 def brief(event: dict) -> str:
     if event["kind"] in {"file_edit", "document_change"}:
-        p = Path(event["artifact"]).name
+        p = Path(event["artifact"]).name if event["artifact"] else ""
+        # Never render a blank card: fall back to the recorded text excerpt.
+        if not p:
+            return clip(event["text"], 160) or event["kind"]
         sections = [d["section"] for d in event["metadata"].get("changes", [])]
         return p + (" · " + "、".join(sections[:4]) if sections else "")
     return short_result(event["text"]) if event["kind"] == "agent_message" else clip(event["text"], 160)

@@ -21,7 +21,8 @@ class WorkLedgerTracker {
       } else if(!creation && !previous && this.pending?.matched && i>promptPosition && promptPosition>=0 && r.role==='assistant' && (!this.pending.assistant||this.pending.assistant===r.id)){
         this.pending.assistant=r.id;creation=at;
       }
-      if(creation && (!previous||previous.text!==r.text))output.push({...r,occurred_at:creation,chronology:'live_observed'});
+      const changed = !!previous && previous.text!==r.text;
+      if(creation && (!previous || (r.role==='assistant' && changed)))output.push({...r,occurred_at:creation,chronology:'live_observed'});
       this.seen.set(r.id,{text:r.text,captured:!!creation,at:creation});
     }
     return output;

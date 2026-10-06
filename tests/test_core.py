@@ -21,7 +21,7 @@ from workledger.adapters.opencode import parse_opencode_export, import_opencode_
 from workledger.adapters.bridge import ingest_bridge, import_chatgpt_export
 from workledger.ingest import collect, read_rows
 from workledger.documents import structure, changes, collect_documents
-from workledger.report import build_report, render_html, root_session
+from workledger.report import build_report, render_html, root_session, short_result
 from workledger.runtime import due_dates
 from workledger.macos import launchd_plist, open_output
 from workledger.server import make_server, valid_host, valid_origin
@@ -274,6 +274,14 @@ class ReportTests(Base):
     def test_report_summary_bounded(self):
         for i in range(80):self.store.event('x',str(i),'note',actor='human',occurred_at=AT,text='item'+str(i))
         r=build_report(self.cfg,self.store,'2026-10-06');self.assertLessEqual(len(r['projects'][0]['personal']),4)
+    def test_short_result_prefers_final_lines(self):
+        text='Sure, here is what I did:\nI looked at the code and thought about it.\nDone. Updated the renderer to escape HTML.'
+        out=short_result(text);self.assertNotIn('Sure, here is what I did',out);self.assertIn('Done. Updated the renderer',out)
+    def test_short_result_preserves_date_prefix(self):
+        self.assertTrue(short_result('2026-10-06 fixed login retry bug').startswith('2026-10-06'))
+    def test_file_edit_without_artifact_has_text(self):
+        self.store.event('x','e1','file_edit',session_id='x:a',occurred_at=AT,actor='agent',artifact='',text='apply_patch 已返回成功')
+        r=build_report(self.cfg,self.store,'2026-10-06');self.assertTrue(all(c['text'] for c in r['projects'][0]['agent_files']))
 
 class SchedulingTests(Base):
     def test_no_auto_when_disabled(self):self.assertEqual(due_dates(self.cfg,self.store,'2026-10-06T19:00:00Z'),[])
