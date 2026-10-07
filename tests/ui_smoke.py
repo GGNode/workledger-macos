@@ -32,7 +32,8 @@ with tempfile.TemporaryDirectory() as temp:
             page.screenshot(path=str(artifacts/'control-panel.png'),full_page=True)
             report=create_demo(Path(temp)/'demo')
             page.goto(report.as_uri());page.wait_for_timeout(200)
-            assert page.locator('h1').inner_text()=='2026-10-06 工作简报'
+            assert page.locator('h1').inner_text()=='今天，工作推进到了哪里'
+            assert '2026-10-06 / DAILY REVIEW' in page.locator('.eyebrow').inner_text()
             assert '演示数据' in page.inner_text('body')
             page.screenshot(path=str(artifacts/'demo-desktop.png'),full_page=True)
             page.set_viewport_size({'width':390,'height':844});page.screenshot(path=str(artifacts/'demo-mobile.png'),full_page=True)
