@@ -260,7 +260,7 @@ class ModelClient:
                 if exc.code not in {"provider", "rate_limit", "invalid_json", "schema"}:
                     break
                 if exc.code in {"invalid_json", "schema"}:
-                    repair = "\n上次响应未通过校验。仅返回严格 JSON；引用必须来自本包，逐项保留归属与日期。校验类别：" + exc.code
+                    repair = "\n上次响应未通过校验。仅返回严格 JSON；引用必须来自本包，逐项保留归属与日期。所有 evidence_ids=[] 或没有来源的陈述都应删除，正文数组可用 []；不得捏造引用来修复格式。校验类别：" + exc.code
                     if exc.code == "schema":
                         repair += "；失败约束：" + exc.detail
                 elif attempt+1 < attempts:

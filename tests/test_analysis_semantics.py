@@ -45,7 +45,7 @@ class ReadabilityTests(Base):
         self.assertEqual(a['status'],'complete');self.assertEqual(len(a['themes']),4)
         self.assertEqual(a['coverage']['evidence_analyzed'],a['coverage']['today_evidence'])
         self.assertEqual(a['coverage']['tasks_analyzed'],6)
-        self.assertEqual(self.replay.stages,['map','route','theme','theme','theme','theme','day'])
+        self.assertEqual(self.replay.stages,['map']*6+['route','theme','theme','theme','theme','day'])
     def test_unanalyzed_observations_stay_out_of_main_narrative(self):
         r=self.fixture_report();theme=copy.deepcopy(r['analysis']['themes'][0])
         theme.update(id='pending-only',title='Synthetic pending observations',analysis_status='observation_only')
@@ -194,9 +194,10 @@ class EvidencePlanningTests(Base):
         for i in range(100):
             self.store.session('x',str(i),cwd='/synthetic/shared')
             self.store.event('x',str(i),'user_message',session_id='x:'+str(i),occurred_at=f'2026-10-06T09:{i//60:02}:{i%60:02}Z',text='A'*5000,actor='unknown')
-        p=self.plan();first=[r for packet in p['packets'] for r in packet][:100]
+        p=self.plan();first=[r for packet in p['packets'][:100] for r in packet]
         self.assertEqual(len({r['task_id'] for r in first}),100)
-        self.assertTrue(all(r['part']==1 for r in first))
+        self.assertTrue(all(packet[0]['part']==1 for packet in p['packets'][:100]))
+        self.assertTrue(all(len({r['task_id'] for r in packet})==1 for packet in p['packets']))
         indices=[int(r['task_id'].split(':')[1]) for r in first[:5]]
         self.assertLess(min(indices),30);self.assertGreater(max(indices),70)
     def test_partial_long_event_is_not_counted_fully_analyzed(self):

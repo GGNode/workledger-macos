@@ -129,6 +129,9 @@ def item_ids(value):
 def validate_map(obj, evidence, task_ids, required_ids, *, allow_partial=False):
     if not isinstance(obj, dict):
         raise ValueError("map response must be an object")
+    discarded_uncited = 0
+    if allow_partial:
+        obj, discarded_uncited = omit_uncited_map_statements(obj)
     accounted = ids(obj.get("accounted_ids"), evidence, "accounted_ids")
     if not allow_partial and not set(required_ids) <= set(accounted):
         raise ValueError("map response silently omitted evidence")
@@ -146,6 +149,7 @@ def validate_map(obj, evidence, task_ids, required_ids, *, allow_partial=False):
         # A coverage failure does not invalidate otherwise validated claims.
         # Only declared AND actually cited/classified records can count as done.
         result["unaccounted_ids"] = sorted(set(required_ids) - (set(accounted) & cited))
+        result["discarded_uncited_statements"] = discarded_uncited
     return result
 
 
@@ -177,3 +181,25 @@ def validate_day(obj, evidence):
     if any(v["scope"] != "today" for v in highlights):
         raise ValueError("daily highlights must concern today")
     return {"highlights": highlights}
+
+
+def omit_uncited_map_statements(obj):
+    """Discard standalone unsupported claims, never accept or fabricate a citation.
+
+    Issues remain strict: a malformed impact/resolution cannot silently hide a
+    blocking problem. Nonempty invalid references and attribution still reject.
+    """
+    result = copy.deepcopy(obj)
+    removed = 0
+    items = result.get("items")
+    if isinstance(items, list):
+        for value in items:
+            if not isinstance(value, dict):
+                continue
+            for section in SECTIONS:
+                rows = value.get(section)
+                if isinstance(rows, list):
+                    kept = [c for c in rows if not (isinstance(c, dict) and c.get("evidence_ids") == [])]
+                    removed += len(rows)-len(kept)
+                    value[section] = kept
+    return result, removed

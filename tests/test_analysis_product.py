@@ -98,7 +98,7 @@ class ProductTests(unittest.TestCase):
     def test_partial_map_publishes_analysis_and_preserves_missing_evidence(self):
         self.cfg.save({'llm':{'mode':'opencode'}})
         kept=self.store.event('test','kept','note',occurred_at=AT,text='Synthetic confirmed work',actor='human',session_id='kept-task')
-        omitted=self.store.event('test','omitted','user_message',occurred_at=AT,text='Independent requirement',session_id='omitted-task')
+        omitted=self.store.event('test','omitted','user_message',occurred_at=AT,text='Independent requirement',session_id='kept-task')
         self.store.conn.commit()
         class PartialResponse:
             calls=0;actual_models=set()

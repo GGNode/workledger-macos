@@ -22,7 +22,7 @@ RULES = """你为个人工作日报分析证据，不是替人执行任务。输
 明确主子关系只由 task_id/native_session_ids 提供。可按内容归并同主题，不能发明 session 父子关系。scope=history 仅用于理解，不能写成今天新增的成果。human_confirmed 只用于已确认的人类记录；user_direction 表示用户侧需求、选择和反馈，不证明物理打字。unverified_change 表示文件变化，不能推断作者。
 失败结合后续证据判断：同操作重试成功可能恢复该操作，但不自动证明整个工作完成。替代方案要有具体对应证据。部分包只看到请求时，不得断言目标至今未完成或产物未产出；只能说明本次证据未确认。先检查同任务 context 中时间更晚的交付说明和成功写入；它们可能更新该任务状态，但 Agent 自述仍不是独立验证。没有后续信息用 uncertain；只有证据明确最终阻塞才用 open + blocking。已恢复的例行工具问题不应占据主视图。重要失败说明哪项工作、影响、恢复/阻塞状态。采集器故障不等于工作任务失败。
 不得杜撰工时、效果、收益或建议。建议只在有相关证据时给出，放 suggestions，与发生的事实分开。无证据的字段用空数组。不要为了填满每个字段编造内容。同一事实保留一处，重复子任务汇报作为重复证据。
-每条重要陈述引用实际 evidence_ids。ID 存在不等于结论正确，须检查语义、时间、角色和验证范围。纯请求或工具调用计划不构成 results。不要把历史证据改写为今天。正文不得宣称具有数学意义的自动事实验证。
+每条重要陈述引用实际 evidence_ids。严禁输出 evidence_ids=[] 的陈述；没有可引用证据时删除整个陈述、对应正文数组用 []，不能为补齐格式捏造引用。ID 存在不等于结论正确，须检查语义、时间、角色和验证范围。纯请求或工具调用计划不构成 results。不要把历史证据改写为今天。正文不得宣称具有数学意义的自动事实验证。
 只输出严格 JSON，不加 Markdown 围栏。每条陈述的形状是 {"text":"中文说明，通常一至两句", "evidence_ids":["实际ID"], "basis":"human_confirmed|user_direction|tool_observed|agent_claim|unverified_change|inference 中的一个", "scope":"today 或 history"}。
 问题各字段必须也是完整陈述对象，不得使用普通字符串。例如 {"problem":{"text":"根据 Agent 说明，守卫行为可能影响提交","evidence_ids":["替换为实际ID"],"basis":"agent_claim","scope":"today"},"impact":{"text":"影响尚未获得运行验证","evidence_ids":["替换为实际ID"],"basis":"inference","scope":"today"},"state":"uncertain","severity":"material","resolution":null}。resolution 非空时也必须含 text/evidence_ids/basis/scope。示例只是结构，不能将示例事实或 ID 写进响应。
 工作条目形状是 {"title":"具体工作主题，不是原始指令", "task_ids":["实际task id"], "work":[陈述], "results":[陈述], "remaining":[陈述], "suggestions":[陈述], "issues":[{"problem":陈述,"impact":陈述,"state":"resolved|open|uncertain 中的一个","severity":"routine|material|blocking 中的一个","resolution":陈述或null}]}。每个正文数组最多8条，issues最多6条。结果与验证边界应写在同一句或相邻句，避免夸大。
@@ -246,6 +246,7 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
         try:
             value = client.request("map", data, MAP_PROMPT,
                                    lambda x: validate_map(x, relevant, {r["task_id"] for r in records}, required, allow_partial=True))
+            output["coverage"]["discarded_uncited_statements"] = output["coverage"].get("discarded_uncited_statements", 0) + value.get("discarded_uncited_statements", 0)
             unaccounted = set(value.get("unaccounted_ids", []))
             if unaccounted:
                 output["coverage"]["packets_partial"] += 1

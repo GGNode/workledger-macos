@@ -98,6 +98,49 @@ def evidence_body(e):
     return e.get("text", "") + ("\nMETADATA\n" + json.dumps(meta, ensure_ascii=False, sort_keys=True) if meta else "")
 
 
+def observed(e):
+    """Same condition as schema.observed: successful tool_result or successful file_edit."""
+    return ((e["kind"] == "tool_result" and e.get("metadata", {}).get("success") is True) or
+            (e["kind"] == "file_edit" and e.get("evidence") == "successful_tool_result"))
+
+
+def supported_bases(e):
+    """Return the set of provenance bases this evidence entry can support,
+    derived from the exact same conditions as schema.claim validation.
+    This is a hint, not a mathematical guarantee; the validator remains the final boundary."""
+    bases = {"inference"}  # inference is always available
+    kind = e["kind"]
+    actor = e.get("actor")
+    meta = e.get("metadata", {})
+    evidence_val = e.get("evidence", "")
+    success = meta.get("success")
+
+    if actor == "human":
+        bases.add("human_confirmed")
+    if kind in {"user_message", "note", "review"}:
+        bases.add("user_direction")
+    if observed(e):
+        bases.add("tool_observed")
+    if kind == "agent_message":
+        bases.add("agent_claim")
+    if kind in {"document_change", "file_edit"} and actor == "unknown":
+        bases.add("unverified_change")
+    return sorted(bases)
+
+
+def result_eligible(e):
+    """Return True if this evidence could support a 'results' section claim.
+    Request/plan/context-only records cannot prove results; history cannot support today's results."""
+    kind = e["kind"]
+    scope = e.get("scope", "today")
+    if scope == "history":
+        return False
+    # user_message, delegated_instruction, tool_call, context are request/plan only
+    if kind in {"user_message", "delegated_instruction", "tool_call", "context"}:
+        return False
+    return True
+
+
 def prepare(config, store, events, sessions, day):
     start, _ = day_bounds(day, config.data["timezone"])
     excluded = exclusions(config, events, sessions)
@@ -162,38 +205,62 @@ def prepare(config, store, events, sessions, day):
             if e["kind"] == "tool_result" and "output_excerpt" in e.get("metadata", {}) and "output_chars" not in e["metadata"]:
                 truncations.append(e["id"])
             for n in range(size):
+                bases = supported_bases(evidence)
                 records.append({"id": e["id"], "task_id": tid, "scope": "today", "kind": e["kind"],
                                 "actor": e["actor"], "at": e.get("occurred_at"), "source": e["source"],
                                 "artifact": e.get("artifact", ""), "evidence": e.get("evidence", ""),
                                 "success": e.get("metadata", {}).get("success"),
                                 "part": n+1, "parts": size, "content": text[n*segment:(n+1)*segment],
-                                "possible_retry_success": evidence.get("possible_retry_success")})
+                                "possible_retry_success": evidence.get("possible_retry_success"),
+                                "supported_bases": bases,
+                                "result_eligible": result_eligible(evidence)})
         queues[tid] = deque(records)
-    # Spread an incomplete first round through the day as well. A small budget
-    # must not systematically privilege only the earliest or latest sessions.
-    ordered = list(queues)
-    ranges = deque([(0, len(ordered))]); order = []
+    # Fair round-robin: one native task per packet, preserving chronological order within each task.
+    # Build per-task bounded packet queues, then interleave them round-robin.
+    task_packets = {}
+    limit = config.data["analysis"]["chunk_chars"]
+    for tid, q in queues.items():
+        packets_for_task = []
+        current_packet = []
+        current_chars = 0
+        while q:
+            record = q[0]  # peek
+            cost = len(json_text(record))
+            # If adding this record would exceed limits, finalize current packet
+            if current_packet and (current_chars + cost > limit or len(current_packet) >= 80):
+                packets_for_task.append(current_packet)
+                current_packet = []
+                current_chars = 0
+            # Take the record
+            current_packet.append(q.popleft())
+            current_chars += cost
+        if current_packet:
+            packets_for_task.append(current_packet)
+        task_packets[tid] = packets_for_task
+    # Interleave packets round-robin across tasks (fair first round, then subsequent rounds)
+    # Preserve the mid-point ordering for the first round to spread across the day.
+    ordered_tasks = list(task_packets.keys())
+    # Mid-point ordering for fair spread
+    ranges = deque([(0, len(ordered_tasks))])
+    fair_order = []
     while ranges:
         lo, hi = ranges.popleft()
         if lo < hi:
-            mid = (lo+hi)//2; order.append(ordered[mid])
-            ranges.extend(((lo, mid), (mid+1, hi)))
-    fair = []
-    while any(queues.values()):
-        for tid in order:
-            q = queues[tid]
+            mid = (lo + hi) // 2
+            fair_order.append(ordered_tasks[mid])
+            ranges.extend(((lo, mid), (mid + 1, hi)))
+    # Round-robin dequeue from each task's packet queue
+    packets = []
+    task_queues = {tid: deque(pkts) for tid, pkts in task_packets.items() if pkts}
+    while task_queues:
+        for tid in fair_order:
+            if tid not in task_queues:
+                continue
+            q = task_queues[tid]
             if q:
-                fair.append(q.popleft())
-    packets, packet, chars = [], [], 0
-    limit = config.data["analysis"]["chunk_chars"]
-    for record in fair:
-        cost = len(json_text(record))
-        if packet and (chars+cost > limit or len(packet)>=80 or
-                       (record["task_id"] not in {r["task_id"] for r in packet} and len({r["task_id"] for r in packet})>=16)):
-            packets.append(packet); packet=[]; chars=0
-        packet.append(record); chars+=cost
-    if packet:
-        packets.append(packet)
+                packets.append(q.popleft())
+            if not q:
+                del task_queues[tid]
     return {"tasks": tasks, "evidence": by_id, "packets": packets, "excluded": excluded,
             "truncated_evidence_ids": sorted(set(truncations)), "history_omitted": context_omitted,
             "history_window_start": earliest, "today_ids": [e["id"] for e in today_rows]}
@@ -219,7 +286,7 @@ def packet_input(plan, records, config):
             closing_ids.append(settled_writes[-1]["id"])
         # Same-day purpose and the latest prior decision keep later tool-heavy
         # chunks interpretable. Their scope remains today, not invented history.
-        cutoff = min((r.get("at") or "" for r in records if r["task_id"]==tid), default="")
+        cutoff = min((r.get("at") or "" for r in records if r["task_id"] == tid), default="")
         prior = [e for e in task["events"] if (e.get("occurred_at") or "") <= cutoff and e["id"] not in direct]
         requests = [e for e in prior if e["kind"] in {"user_message", "note", "review"}]
         if requests:
@@ -236,14 +303,17 @@ def packet_input(plan, records, config):
             continue
         e = plan["evidence"][eid]
         body = evidence_body(e)
-        remaining = budget-used
+        remaining = budget - used
         if remaining < 200:
             omitted.append(eid); continue
         text = body[:min(2000, remaining)]
+        bases = supported_bases(e)
         context.append({"id": eid, "task_id": e["task_id"], "scope": e["scope"], "kind": e["kind"],
                         "actor": e["actor"], "at": e.get("occurred_at"), "content": text,
                         "success": e.get("metadata", {}).get("success"), "evidence": e.get("evidence", ""),
-                        "truncated": len(text)<len(body)})
+                        "truncated": len(text) < len(body),
+                        "supported_bases": bases,
+                        "result_eligible": result_eligible(e)})
         used += len(text)
     return {"tasks": [{"id": tid, "workspace": plan["tasks"][tid]["workspace"],
                        "native_session_ids": plan["tasks"][tid]["session_ids"],
