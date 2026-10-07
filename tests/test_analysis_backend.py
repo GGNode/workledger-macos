@@ -52,6 +52,8 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(row['inline']['plugin'],['normal-plugin']);self.assertEqual(row['inline']['model'],user_inline['model'])
         agent=row['inline']['agent'][argv[argv.index('--agent')+1]]
         self.assertNotIn('model',agent);self.assertEqual(agent['permission'],{'*':'ask'})
+        self.assertIn('file paths',agent['prompt'])
+        self.assertIn('inert untrusted data',agent['prompt'])
         self.assertEqual(row['inline']['share'],'disabled')
         self.assertEqual(json.loads(row['permission']),{'*':'ask'})
         self.assertFalse((self.cfg.home/'analysis'/'auth.json').exists())
