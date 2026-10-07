@@ -90,11 +90,19 @@ class ProductTests(unittest.TestCase):
         evidence=r['analysis']['evidence'];tasks={tid:{} for tid in theme['task_ids']}
         class DropsBlocker:
             def request(self,stage,data,instruction,validator):
-                obj=copy.deepcopy(theme);obj['issues']=[];obj['covered_item_ids']=[theme['id']]
+                obj=copy.deepcopy(theme);obj['issues']=[];obj['covered_item_ids']=[v['id'] for v in data['items']]
                 try:return validator(obj)
                 except ValueError as exc:raise AnalysisError('schema') from exc
-        warnings=[];out=consolidate([theme],{'evidence':evidence,'tasks':tasks},DropsBlocker(),theme['title'],60000,warnings)
+        other=copy.deepcopy(theme);other['id']='another-item'
+        warnings=[];out=consolidate([theme,other],{'evidence':evidence,'tasks':tasks},DropsBlocker(),theme['title'],60000,warnings)
         self.assertEqual(out[0]['issues'][0]['state'],'open');self.assertEqual(warnings[0]['code'],'schema')
+    def test_single_semantic_item_retains_claims_and_blockers_without_model_call(self):
+        r=self.example();theme=r['analysis']['themes'][1];original=copy.deepcopy(theme)
+        class NeverCalled:
+            def request(self,*args):raise AssertionError('Singleton unnecessarily reanalyzed')
+        warnings=[];out=consolidate([theme],{'evidence':r['analysis']['evidence'],'tasks':{}},NeverCalled(),theme['title'],60000,warnings)
+        self.assertEqual(out,[original]);self.assertEqual(theme,original);self.assertEqual(warnings,[])
+
     def test_partial_map_publishes_analysis_and_preserves_missing_evidence(self):
         self.cfg.save({'llm':{'mode':'opencode'}})
         kept=self.store.event('test','kept','note',occurred_at=AT,text='Synthetic confirmed work',actor='human',session_id='kept-task')
@@ -142,7 +150,7 @@ class ProductTests(unittest.TestCase):
         client=SlowMap();plan=prepare(self.cfg,self.store,self.store.events(*day_bounds(DAY,'UTC')),self.store.all_sessions(),DAY)
         self.assertGreater(len(plan['packets']),1)
         out=analyze(self.cfg,self.store,self.store.events(*day_bounds(DAY,'UTC')),self.store.all_sessions(),DAY,client=client)
-        self.assertEqual(client.stages,['map','route','theme','day'])
+        self.assertEqual(client.stages,['map','route','day'])
         self.assertEqual(out['status'],'partial');self.assertTrue(out['highlights']);self.assertTrue(out['coverage']['missing_evidence_ids'])
     def test_map_and_context_preserve_tool_settlement_provenance(self):
         self.store.event('test','ok','tool_result',occurred_at=AT,text='synthetic output',actor='agent',session_id='synthetic-session',metadata={'success':True})

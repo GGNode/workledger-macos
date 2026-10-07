@@ -165,7 +165,7 @@ def consolidate(members, plan, client, title, limit, warnings):
         batches = list(pack(work, limit))
         updated = []
         for batch in batches:
-            if len(batch) == 1 and depth > 0:
+            if len(batch) == 1:
                 updated.extend(batch); continue
             relevant = refs_for(batch, plan["evidence"])
             tids = {tid for v in batch for tid in v["task_ids"]}

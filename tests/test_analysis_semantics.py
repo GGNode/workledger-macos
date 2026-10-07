@@ -45,7 +45,7 @@ class ReadabilityTests(Base):
         self.assertEqual(a['status'],'complete');self.assertEqual(len(a['themes']),4)
         self.assertEqual(a['coverage']['evidence_analyzed'],a['coverage']['today_evidence'])
         self.assertEqual(a['coverage']['tasks_analyzed'],6)
-        self.assertEqual(self.replay.stages,['map']*6+['route','theme','theme','theme','theme','day'])
+        self.assertEqual(self.replay.stages,['map']*6+['route','theme','day'])
     def test_unanalyzed_observations_stay_out_of_main_narrative(self):
         r=self.fixture_report();theme=copy.deepcopy(r['analysis']['themes'][0])
         theme.update(id='pending-only',title='Synthetic pending observations',analysis_status='observation_only')
