@@ -19,9 +19,9 @@ def result(ids, statements=None, ignored=None, issues=None):
 
 class Client:
     def __init__(self, replies):
-        self.replies=iter(replies);self.calls=[];self.started='unchanged';self.disabled_until=7
+        self.replies=iter(replies);self.calls=[];self.instructions=[];self.started='unchanged';self.disabled_until=7
     def request(self, stage, data, instruction, validator):
-        self.calls.append(copy.deepcopy(data))
+        self.calls.append(copy.deepcopy(data));self.instructions.append(instruction)
         value=next(self.replies)
         if isinstance(value,Exception):raise value
         try:return validator(copy.deepcopy(value))
@@ -77,6 +77,16 @@ class MappingTests(unittest.TestCase):
                 c=Client([self.initial(),AnalysisError(code)]);out=self.run_map(c)
                 self.assertEqual(out['items'],self.initial()['items']);self.assertEqual(out['unaccounted_ids'],['e2'])
                 self.assertEqual(len(c.calls),2);self.assertEqual(c.disabled_until,7);self.assertEqual(c.started,'unchanged')
+
+    def test_browser_visits_receive_observation_contract_without_changing_basis(self):
+        row={**self.evidence['e2'],'kind':'context','evidence':'browser_visit_database'}
+        data={'records':[row],'context':[]};c=Client([result(['e2'],[claim('e2')])])
+        out=request_map(c,data,'Analyze',{'e2':row},{'t'},{'e2'})
+        self.assertIn('浏览器访问记录是当天线索',c.instructions[0]);self.assertIn('不推断阅读',c.instructions[0])
+        self.assertEqual(out['items'][0]['work'][0]['basis'],'inference')
+        other={**row,'evidence':'snapshot_diff','text':'browser_visit_database'};c=Client([result(['e2'],[claim('e2')])])
+        request_map(c,{'records':[other],'context':[]},'Analyze',{'e2':other},{'t'},{'e2'})
+        self.assertEqual(c.instructions,['Analyze'])
 
     def test_fatal_refinement_propagates(self):
         c=Client([self.initial(),AnalysisError('authentication')])

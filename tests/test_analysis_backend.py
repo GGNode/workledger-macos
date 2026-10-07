@@ -57,6 +57,17 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(row['inline']['share'],'disabled')
         self.assertEqual(json.loads(row['permission']),{'*':'ask'})
         self.assertFalse((self.cfg.home/'analysis'/'auth.json').exists())
+    def test_catalog_routing_uses_stage_specific_no_tool_contract(self):
+        for stage in ['route','route_global']:
+            env=restricted_environment({'HOME':'/synthetic/home','OPENCODE_CONFIG_CONTENT':json.dumps({'plugin':['normal-plugin'],'agent':{'custom':{'prompt':'Keep normal custom agent'}}})},'report-agent',stage=stage)
+            inline=json.loads(env['OPENCODE_CONFIG_CONTENT']);agent=inline['agent']['report-agent']
+            self.assertIn('catalog item_ids',agent['prompt']);self.assertNotIn('successful_tool_result',agent['prompt'])
+            self.assertEqual(agent['permission'],{'*':'ask'});self.assertEqual(inline['plugin'],['normal-plugin'])
+            self.assertEqual(inline['agent']['custom']['prompt'],'Keep normal custom agent')
+            prompt=compose_prompt(stage,'Group catalog','',{'catalog':[{'id':'item-a','title':'Synthetic topic'}]})
+            footer=prompt.split('END_UNTRUSTED_EVIDENCE_JSON')[1]
+            self.assertIn('item_ids',footer);self.assertNotIn('problem/impact',footer)
+
     def test_explicit_model_is_optional_not_hardcoded(self):
         self.cfg.save({'llm':{'model':'chosen/provider-model'}})
         self.respond('Path('+repr(str(self.captured))+').write_text(json.dumps(sys.argv))')

@@ -13,11 +13,14 @@ def request_map(client, data, instruction, evidence, task_ids, required_ids):
     full_tasks = set(task_ids)
 
     def ask(current):
+        current_instruction = instruction
+        if any(r.get("evidence") == "browser_visit_database" for r in current["records"]):
+            current_instruction += "\n浏览器访问记录是当天线索，不能仅因 kind=context 就全部忽略。按域名和现存标题概括与工作有关的访问主题，陈述用 inference 并引用实际记录；明确仅有访问证据，现存标题未必是访问时标题。不推断阅读、聊天内容、完成成果、活跃时长或操作者；与工作无关的访问仍可忽略。"
         present = {r["id"] for r in current["records"] + current.get("context", [])}
         relevant = {eid: evidence[eid] for eid in present if eid in evidence}
         need = {r["id"] for r in current["records"]} & required
         tasks = {r["task_id"] for r in current["records"]} & full_tasks
-        return client.request("map", current, instruction,
+        return client.request("map", current, current_instruction,
                               lambda obj: validate_map(obj, relevant, tasks, need, allow_partial=True))
 
     def subset(records, phase, number):
