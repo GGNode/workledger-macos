@@ -134,8 +134,11 @@ def route_items(items, plan, client, limit, warnings):
     for batch in pack(descriptors, limit):
         allowed = {v["id"] for v in batch}
         try:
-            value = client.request("route", {"catalog": batch}, ROUTE_PROMPT, lambda x: validate_routes(x, allowed))
+            value = client.request("route", {"catalog": batch}, ROUTE_PROMPT, lambda x: validate_routes(x, allowed, allow_partial=True))
             groups.extend(value["groups"])
+            if value["unassigned_item_ids"]:
+                warnings.append({"stage": "route", "code": "incomplete", "detail": "遗漏或有冲突的主题归属保持独立；全部工作分析仍保留"})
+                groups.extend({"title": by_id[i]["title"], "item_ids": [i]} for i in value["unassigned_item_ids"])
         except AnalysisError as exc:
             warnings.append({"stage": "route", "code": exc.code})
             groups.extend({"title": by_id[i]["title"], "item_ids": [i]} for i in sorted(allowed))
@@ -148,7 +151,11 @@ def route_items(items, plan, client, limit, warnings):
         if len(json_text(compact)) <= limit:
             try:
                 value = client.request("route_global", {"catalog": compact}, ROUTE_PROMPT,
-                                       lambda x: validate_routes(x, {g["id"] for g in compact}))
+                                       lambda x: validate_routes(x, {g["id"] for g in compact}, allow_partial=True))
+                if value["unassigned_item_ids"]:
+                    warnings.append({"stage": "route_global", "code": "incomplete", "detail": "跨批主题归属遗漏或冲突，相关主题保持独立；没有删除工作分析"})
+                    labels = {g["id"]: g["title"] for g in compact}
+                    value["groups"].extend({"title": labels[i], "item_ids": [i]} for i in value["unassigned_item_ids"])
                 original = {"g"+str(i): g for i, g in enumerate(groups)}
                 groups = [{"title": g["title"], "item_ids": [i for gid in g["item_ids"] for i in original[gid]["item_ids"]]}
                           for g in value["groups"]]
@@ -263,7 +270,7 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
                 items.append(v)
         except AnalysisError as exc:
             warnings.append({"stage": "map", "packet": n, "code": exc.code})
-            if exc.code in {"budget", "unavailable", "directory", "timeout", "authentication", "provider_policy", "configuration", "tool_attempt", "output_limit"}:
+            if exc.code in {"budget", "unavailable", "directory", "authentication", "provider_policy", "configuration", "tool_attempt", "output_limit"}:
                 break
     done = {eid for eid, parts in required_parts.items() if complete_parts[eid] == parts}
     missing = set(plan["today_ids"]) - done

@@ -103,6 +103,28 @@ class ProductTests(unittest.TestCase):
         warnings=[];out=consolidate([theme],{'evidence':r['analysis']['evidence'],'tasks':{}},NeverCalled(),theme['title'],60000,warnings)
         self.assertEqual(out,[original]);self.assertEqual(theme,original);self.assertEqual(warnings,[])
 
+    def test_packet_timeout_retains_missing_record_and_allows_later_analysis(self):
+        self.cfg.save({'llm':{'mode':'opencode'}})
+        for name in ['first','second']:
+            self.store.event('test',name,'note',occurred_at=AT,text='Synthetic explicitly confirmed note',actor='human',session_id=name)
+        self.store.conn.commit()
+        class Client:
+            def __init__(self,code):self.code=code;self.maps=0
+            def request(self,stage,data,instruction,validator):
+                if stage=='map':
+                    self.maps+=1
+                    if self.maps==1:raise AnalysisError(self.code)
+                    row=data['records'][0];statement={'text':'Explicit synthetic note','evidence_ids':[row['id']],'basis':'human_confirmed','scope':'today'}
+                    return validator({'items':[{'title':'Confirmed note','task_ids':[row['task_id']],'work':[statement],'results':[],'remaining':[],'suggestions':[],'issues':[]}],'accounted_ids':[row['id']],'ignored':[]})
+                if stage=='route':return validator({'groups':[{'title':'Confirmed note','item_ids':[v['id'] for v in data['catalog']]}]})
+                if stage=='day':return validator({'highlights':[]})
+                raise AssertionError(stage)
+        client=Client('timeout');r=build_report(self.cfg,self.store,DAY,analysis_client=client)
+        self.assertEqual(client.maps,2);self.assertEqual(r['analysis']['coverage']['evidence_analyzed'],1)
+        self.assertEqual(len(r['analysis']['coverage']['missing_evidence_ids']),1)
+        for code in ['authentication','provider_policy','tool_attempt']:
+            client=Client(code);build_report(self.cfg,self.store,DAY,analysis_client=client);self.assertEqual(client.maps,1)
+
     def test_partial_map_publishes_analysis_and_preserves_missing_evidence(self):
         self.cfg.save({'llm':{'mode':'opencode'}})
         kept=self.store.event('test','kept','note',occurred_at=AT,text='Synthetic confirmed work',actor='human',session_id='kept-task')

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+from collections import Counter
 
 BASES = {"human_confirmed", "user_direction", "tool_observed", "agent_claim", "unverified_change", "inference"}
 SECTIONS = ("work", "results", "remaining", "suggestions")
@@ -153,15 +154,25 @@ def validate_map(obj, evidence, task_ids, required_ids, *, allow_partial=False):
     return result
 
 
-def validate_routes(obj, available):
+def validate_routes(obj, available, *, allow_partial=False):
     if not isinstance(obj, dict):
         raise ValueError("route response must be an object")
     groups = []
     used = []
     for g in array(obj.get("groups"), "groups", 1000):
+        if not isinstance(g, dict):
+            raise ValueError("route group must be an object")
         members = ids(g.get("item_ids"), available, "item_ids")
         used += members
         groups.append({"title": sentence(g.get("title"), 80), "item_ids": members})
+    if allow_partial:
+        conflicting = {eid for eid, count in Counter(used).items() if count > 1}
+        unassigned = (set(available) - set(used)) | conflicting
+        # Never choose between conflicting semantic assignments. Keep the
+        # original item separately; no facts, citations or blockers are dropped.
+        groups = [{**g, "item_ids": [eid for eid in g["item_ids"] if eid not in conflicting]} for g in groups]
+        groups = [g for g in groups if g["item_ids"]]
+        return {"groups": groups, "unassigned_item_ids": sorted(unassigned)}
     if len(used) != len(set(used)) or set(used) != set(available):
         raise ValueError("semantic routes must partition every work item exactly once")
     return {"groups": groups}
