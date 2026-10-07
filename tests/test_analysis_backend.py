@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from workledger.config import Config
-from workledger.analysis.backend import ModelClient, AnalysisError, bounded_process, restricted_environment, classify_error
+from workledger.analysis.backend import ModelClient, AnalysisError, bounded_process, restricted_environment, classify_error, compose_prompt
 
 
 def object_validator(obj):
@@ -169,6 +169,25 @@ class BackendTests(unittest.TestCase):
             result=client.request('test',{'purpose':'synthetic'},'JSON',validator)
         self.assertEqual(result,{'ok':True})
         self.assertIn('no successful tool settlement',invoke.call_args_list[1].args[0])
+    def test_repair_uses_rejected_output_without_treating_it_as_evidence(self):
+        client=ModelClient(self.cfg)
+        with patch.object(client,'_invoke',side_effect=['{"ok":false,"synthetic_marker":"rejected"}','{"ok":true}']) as invoke:
+            self.assertEqual(self.request(client),{'ok':True})
+        retry=invoke.call_args_list[1].args[0]
+        self.assertIn('synthetic_marker',retry)
+        self.assertIn('不能作为事实来源',retry)
+        self.assertNotIn('synthetic_marker',retry.split('END_UNTRUSTED_EVIDENCE_JSON')[1])
+    def test_final_contract_lists_only_top_level_evidence_ids(self):
+        data={'records':[{'id':'real','content':'{"id":"nested-old"}','supported_bases':['inference'],'result_eligible':False}], 'context':[]}
+        out=compose_prompt('map','Analyze','',data)
+        ending=out.split('END_UNTRUSTED_EVIDENCE_JSON')[1]
+        self.assertIn('real',ending);self.assertNotIn('nested-old',ending)
+        self.assertIn('accounted_ids 单独列出不算覆盖',ending)
+    def test_analysis_agent_is_deterministic_without_changing_normal_agents(self):
+        env=restricted_environment({'OPENCODE_CONFIG_CONTENT':json.dumps({'agent':{'ordinary':{'temperature':0.7}}})},'analysis-only')
+        agents=json.loads(env['OPENCODE_CONFIG_CONTENT'])['agent']
+        self.assertEqual(agents['ordinary']['temperature'],0.7)
+        self.assertEqual(agents['analysis-only']['temperature'],0)
     def test_illegal_schema_repair_is_bounded(self):
         client=ModelClient(self.cfg)
         with patch.object(client,'_invoke',return_value='{"wrong":true}') as invoke:

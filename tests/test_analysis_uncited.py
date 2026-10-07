@@ -26,7 +26,7 @@ class UncitedStatementTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.check()
     def test_false_tool_settlement_still_rejects(self):
         self.obj['items'][0]['work'][0]['basis']='tool_observed'
-        with self.assertRaises(ValueError):self.check()
+        with self.assertRaisesRegex(ValueError,"evidence_ids=e"):self.check()
     def test_uncited_issue_is_never_silently_discarded(self):
         self.obj['items'][0]['issues']=[{'problem':self.good,'impact':{'text':'Unsupported impact','evidence_ids':[],'basis':'inference','scope':'today'},'state':'open','severity':'blocking','resolution':None}]
         with self.assertRaises(ValueError):self.check()

@@ -13,6 +13,7 @@ from pathlib import Path
 from ..util import atomic_write, digest, json_text, now
 from . import SCHEMA, PROMPT_VERSION
 from .backend import AnalysisError, ModelClient, MESSAGES
+from .mapping import request_map
 from .evidence import prepare, packet_input, evidence_body
 from .schema import (SECTIONS, claim, item_ids, validate_map, validate_routes,
                      validate_theme, validate_day, observed)
@@ -244,8 +245,7 @@ def analyze(config, store, events, sessions, day, *, refresh=False, client=None)
         relevant = {i: plan["evidence"][i] for i in allowed}
         required = {r["id"] for r in records}
         try:
-            value = client.request("map", data, MAP_PROMPT,
-                                   lambda x: validate_map(x, relevant, {r["task_id"] for r in records}, required, allow_partial=True))
+            value = request_map(client, data, MAP_PROMPT, relevant, {r["task_id"] for r in records}, required)
             output["coverage"]["discarded_uncited_statements"] = output["coverage"].get("discarded_uncited_statements", 0) + value.get("discarded_uncited_statements", 0)
             unaccounted = set(value.get("unaccounted_ids", []))
             if unaccounted:

@@ -105,7 +105,9 @@ class ProductTests(unittest.TestCase):
             def request(self,stage,data,instruction,validator):
                 self.calls+=1
                 if stage=='map':
-                    r=next(v for v in data['records'] if v['id']==kept)
+                    r=next((v for v in data['records'] if v['id']==kept),None)
+                    if r is None:
+                        return validator({'items':[],'accounted_ids':[v['id'] for v in data['records']],'ignored':[]})
                     self.work={'title':'Confirmed work','task_ids':[r['task_id']],'work':[{'text':'Confirmed work','evidence_ids':[kept],'basis':'human_confirmed','scope':'today'}],'results':[],'remaining':[],'suggestions':[],'issues':[]}
                     value={'items':[self.work],'accounted_ids':[kept,omitted],'ignored':[]}
                 elif stage=='route':value={'groups':[{'title':'Confirmed work','item_ids':[v['id'] for v in data['catalog']]}]}

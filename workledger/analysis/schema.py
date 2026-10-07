@@ -51,9 +51,9 @@ def claim(value, evidence, *, section="work"):
     if basis == "user_direction" and not any(e["kind"] in {"user_message", "note", "review"} for e in rows):
         raise ValueError("no user decision evidence")
     if basis == "tool_observed" and not any(observed(e) for e in rows):
-        raise ValueError("no successful tool settlement")
+        raise ValueError("no successful tool settlement for evidence_ids=" + ",".join(references[:3]) + "; tool_observed requires success=true, otherwise preserve uncertainty")
     if basis == "agent_claim" and not any(e["kind"] == "agent_message" for e in rows):
-        raise ValueError("no agent statement")
+        raise ValueError("no agent statement for evidence_ids=" + ",".join(references[:3]))
     if basis == "unverified_change" and not any(e["kind"] in {"document_change", "file_edit"} and e["actor"] == "unknown" for e in rows):
         raise ValueError("no unattributed change")
     if section == "results":
