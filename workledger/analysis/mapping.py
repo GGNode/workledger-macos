@@ -67,8 +67,11 @@ def request_map(client, data, instruction, evidence, task_ids, required_ids):
         try:
             addition = ask(subset(records, "missing", number))
         except AnalysisError as error:
-            if error.code not in SOFT_FAILURES:
+            if error.code not in SOFT_FAILURES | {"provider", "rate_limit"}:
                 raise
+            # A cooled-down transient provider cannot invalidate already
+            # validated statements. Stop refinement and retain the real gap;
+            # never reset the client or launch another request here.
             break
         if len(result["items"]) + len(addition["items"]) > 20 or len(result["ignored"]) + len(addition["ignored"]) > 200:
             break  # Preserve all accepted issues and claims; never trim to force coverage.

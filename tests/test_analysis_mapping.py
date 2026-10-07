@@ -71,6 +71,13 @@ class MappingTests(unittest.TestCase):
                 c=Client([AnalysisError(code)])
                 with self.assertRaises(AnalysisError) as error:self.run_map(c)
                 self.assertEqual(error.exception.code,code);self.assertEqual(len(c.calls),1);self.assertEqual(c.disabled_until,7)
+    def test_transient_refinement_failure_preserves_valid_initial_analysis(self):
+        for code in ['provider','rate_limit']:
+            with self.subTest(code=code):
+                c=Client([self.initial(),AnalysisError(code)]);out=self.run_map(c)
+                self.assertEqual(out['items'],self.initial()['items']);self.assertEqual(out['unaccounted_ids'],['e2'])
+                self.assertEqual(len(c.calls),2);self.assertEqual(c.disabled_until,7);self.assertEqual(c.started,'unchanged')
+
     def test_fatal_refinement_propagates(self):
         c=Client([self.initial(),AnalysisError('authentication')])
         with self.assertRaises(AnalysisError) as error:self.run_map(c)
