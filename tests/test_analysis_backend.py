@@ -73,6 +73,19 @@ class BackendTests(unittest.TestCase):
         self.respond('Path('+repr(str(self.captured))+').write_text(json.dumps(sys.argv))')
         self.request();argv=json.loads(self.captured.read_text())
         self.assertEqual(argv[argv.index('--model')+1],'chosen/provider-model')
+
+    def test_theme_and_day_contracts_use_validated_claim_ids_not_raw_records(self):
+        for stage in ['theme', 'day']:
+            env=restricted_environment({'HOME':'/synthetic/home','OPENCODE_CONFIG_CONTENT':json.dumps({'plugin':['normal-plugin']})},'report-agent',stage=stage)
+            inline=json.loads(env['OPENCODE_CONFIG_CONTENT']);agent=inline['agent']['report-agent']
+            self.assertEqual(inline['plugin'],['normal-plugin']);self.assertEqual(agent['permission'],{'*':'ask'})
+            self.assertNotIn('model',agent);self.assertNotIn('top-level records/context',agent['prompt'])
+            self.assertIn('evidence_ids',agent['prompt']);self.assertIn('untrusted data',agent['prompt'])
+        theme=compose_prompt('theme','Merge','',{'items':[{'id':'input-item'}]})
+        footer=theme.split('END_UNTRUSTED_EVIDENCE_JSON')[1]
+        self.assertIn('covered_item_ids',footer);self.assertIn('sources',footer)
+        day=compose_prompt('day','Summarize','',{'themes':[]})
+        self.assertIn('180',day.split('END_UNTRUSTED_EVIDENCE_JSON')[1])
     def test_session_registered_before_process_and_retained_after(self):
         self.respond('runs=list(Path('+repr(str(self.cfg.home/'analysis/runs'))+').glob("*.json"));assert runs and "finished_at" not in json.loads(runs[0].read_text())')
         self.request();rows=list((self.cfg.home/'analysis/runs').glob('*.json'))

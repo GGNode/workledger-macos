@@ -179,6 +179,15 @@ def validate_routes(obj, available, *, allow_partial=False):
 
 
 def validate_theme(obj, evidence, tasks, expected_tasks):
+    if isinstance(obj, dict) and "work_items" in obj:
+        # Some providers wrap the requested single item. Unwrap only a lossless,
+        # unambiguous envelope; all claim and native-task checks still apply.
+        if set(obj) != {"work_items", "covered_item_ids"}:
+            raise ValueError("ambiguous theme envelope")
+        wrapped = array(obj["work_items"], "work_items", 1)
+        if len(wrapped) != 1 or not isinstance(wrapped[0], dict) or "covered_item_ids" in wrapped[0]:
+            raise ValueError("theme envelope must contain exactly one work item")
+        obj = wrapped[0]
     result = item(obj, evidence, tasks)
     if set(result["task_ids"]) != set(expected_tasks):
         raise ValueError("theme synthesis omitted a participating native task")
@@ -189,6 +198,8 @@ def validate_day(obj, evidence):
     if not isinstance(obj, dict):
         raise ValueError("day response must be an object")
     highlights = [claim(v, evidence) for v in array(obj.get("highlights"), "highlights", 5)]
+    if any(len(v["text"]) > 180 for v in highlights):
+        raise ValueError("daily highlight text must be at most 180 characters; detail belongs in themes")
     if any(v["scope"] != "today" for v in highlights):
         raise ValueError("daily highlights must concern today")
     return {"highlights": highlights}
