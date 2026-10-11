@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import copy
+import re
 from .backend import AnalysisError
 from .schema import validate_map
 
 SOFT_FAILURES = {"schema", "invalid_json"}
+
+# A date printed in a quoted report is a content clue, not a replacement for
+# the native event timestamp. Only the model decides what the text describes.
+REPORT_DATE = re.compile(r"(?m)^\s*(?:[-*]\s*)?(?:日报日期|报告日期|日期)\s*[:：]\s*(\d{4}-\d{2}-\d{2})\s*$")
 
 
 def request_map(client, data, instruction, evidence, task_ids, required_ids):
@@ -14,6 +19,14 @@ def request_map(client, data, instruction, evidence, task_ids, required_ids):
 
     def ask(current):
         current_instruction = instruction
+        quoted_dates = sorted({date for row in current["records"] + current.get("context", [])
+                               for date in REPORT_DATE.findall(str(row.get("content", "")))
+                               if date != current.get("date")})
+        if quoted_dates:
+            current_instruction += ("\n输入正文明确列出了与本次报告日不同的日期：" + "、".join(quoted_dates)
+                                    + "。先判断它们是旧日报回顾、计划日期还是其他背景。消息今天发送不代表正文复述的工作今天完成；"
+                                      "旧日报的统计、历史任务成果和旧问题应作为 history，不能改写为今日成果。今天可以记录生成、讨论或核对旧日报本身，"
+                                      "但必须有对应证据；不能把旧日报里的任务当成今天执行。不要改变原始事件时间、归属或会话关系。")
         if any(r.get("evidence") == "browser_visit_database" for r in current["records"]):
             current_instruction += "\n浏览器访问记录是当天线索，不能仅因 kind=context 就全部忽略。按域名和现存标题概括与工作有关的访问主题，陈述用 inference 并引用实际记录；明确仅有访问证据，现存标题未必是访问时标题。不推断阅读、聊天内容、完成成果、活跃时长或操作者；与工作无关的访问仍可忽略。"
         present = {r["id"] for r in current["records"] + current.get("context", [])}

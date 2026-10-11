@@ -92,6 +92,23 @@ class MappingTests(unittest.TestCase):
         c=Client([self.initial(),AnalysisError('authentication')])
         with self.assertRaises(AnalysisError) as error:self.run_map(c)
         self.assertEqual(error.exception.code,'authentication');self.assertEqual(len(c.calls),2)
+
+    def test_quoted_report_date_warns_without_rewriting_event_or_history_claim(self):
+        row={**self.evidence['e2'],'kind':'agent_message','actor':'agent',
+             'content':'# Activity report\n- 日期：2026-10-04\nAn earlier review was completed.'}
+        data={'records':[row],'context':[],'date':'2026-10-06'}
+        original=copy.deepcopy(data)
+        statement={**claim('e2','agent_claim'),'scope':'history'}
+        c=Client([result(['e2'],[statement])])
+        out=request_map(c,data,'Analyze',{'e2':row},{'t'},{'e2'})
+        self.assertIn('2026-10-04',c.instructions[0])
+        self.assertEqual(c.calls[0],original);self.assertEqual(data,original)
+        self.assertEqual(out['items'][0]['work'][0]['scope'],'history')
+        # Date mentions are context hints, never a rule that shifts all events.
+        row['content']='- 日期：2026-10-06\nCurrent review.'
+        c=Client([result(['e2'],[claim('e2','agent_claim')])])
+        request_map(c,{**data,'records':[row]},'Analyze',{'e2':row},{'t'},{'e2'})
+        self.assertEqual(c.instructions,['Analyze'])
     def test_false_attribution_and_fabricated_refs_remain_rejected(self):
         for statement in [claim('e2','human_confirmed'),claim('e2','tool_observed'),claim('invented')]:
             with self.subTest(statement=statement):
