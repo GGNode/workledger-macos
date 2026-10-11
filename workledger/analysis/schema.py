@@ -12,7 +12,7 @@ BASIS_LABELS = {"human_confirmed": "本人确认", "user_direction": "用户推�
 
 def array(value, name, maximum=1000):
     if not isinstance(value, list) or len(value) > maximum:
-        raise ValueError(name + " must be a bounded list")
+        raise ValueError(f"{name} must be a list with at most {maximum} entries")
     return value
 
 

@@ -49,6 +49,11 @@ class ThemeEnvelopeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_day({'highlights': [{**exact, 'text': exact['text'] + '长'}]}, self.evidence)
 
+    def test_repair_diagnostic_names_the_actual_section_limit(self):
+        oversized = {**self.item, 'work': [self.statement] * 9}
+        with self.assertRaisesRegex(ValueError, 'work must be a list with at most 8 entries'):
+            validate_theme(oversized, self.evidence, {'t'}, {'t'})
+
 
 if __name__ == '__main__':
     unittest.main()
